@@ -218,8 +218,15 @@ def _legacy_get_basecamp_client() -> Optional[BasecampClient]:
         logger.error(f"Error creating Basecamp client: {e}")
         return None
 
-def _get_auth_error_response() -> Dict[str, Any]:
-    """Return consistent auth error response."""
+def _get_auth_error_response(ctx: Optional[Context] = None) -> Dict[str, Any]:
+    """Return a consistent auth-error response dict.
+
+    Accepts `ctx` because every ctx-migrated tool calls this as
+    `_get_auth_error_response(ctx)`. The message is currently transport-agnostic
+    so `ctx` is not read — it keeps the 75 call sites uniform and is the seam
+    for a future transport-aware error message.
+    """
+    del ctx  # accepted for call-site uniformity; not used by the current message
     if token_storage.is_token_expired():
         return {
             "error": "OAuth token expired",
@@ -2110,16 +2117,16 @@ async def create_attachment(ctx: Context, file_path: str, name: str, content_typ
         }
 
 @mcp.tool()
-async def get_events(project_id: str, recording_id: str) -> Dict[str, Any]:
+async def get_events(ctx: Context, project_id: str, recording_id: str) -> Dict[str, Any]:
     """Get events for a recording.
-    
+
     Args:
         project_id: Project ID
         recording_id: Recording ID
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
     
     try:
         events = await _run_sync(client.get_events, project_id, recording_id)
@@ -2141,15 +2148,15 @@ async def get_events(project_id: str, recording_id: str) -> Dict[str, Any]:
         }
 
 @mcp.tool()
-async def get_webhooks(project_id: str) -> Dict[str, Any]:
+async def get_webhooks(ctx: Context, project_id: str) -> Dict[str, Any]:
     """List webhooks for a project.
-    
+
     Args:
         project_id: Project ID
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
     
     try:
         hooks = await _run_sync(client.get_webhooks, project_id)
@@ -2171,17 +2178,17 @@ async def get_webhooks(project_id: str) -> Dict[str, Any]:
         }
 
 @mcp.tool()
-async def create_webhook(project_id: str, payload_url: str, types: Optional[List[str]] = None) -> Dict[str, Any]:
+async def create_webhook(ctx: Context, project_id: str, payload_url: str, types: Optional[List[str]] = None) -> Dict[str, Any]:
     """Create a webhook.
-    
+
     Args:
         project_id: Project ID
         payload_url: Payload URL
         types: Event types
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
     
     try:
         hook = await _run_sync(client.create_webhook, project_id, payload_url, types)
@@ -2202,16 +2209,16 @@ async def create_webhook(project_id: str, payload_url: str, types: Optional[List
         }
 
 @mcp.tool()
-async def delete_webhook(project_id: str, webhook_id: str) -> Dict[str, Any]:
+async def delete_webhook(ctx: Context, project_id: str, webhook_id: str) -> Dict[str, Any]:
     """Delete a webhook.
-    
+
     Args:
         project_id: Project ID
         webhook_id: Webhook ID
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
     
     try:
         await _run_sync(client.delete_webhook, project_id, webhook_id)
@@ -2233,16 +2240,16 @@ async def delete_webhook(project_id: str, webhook_id: str) -> Dict[str, Any]:
 
 # Document Management
 @mcp.tool()
-async def get_documents(project_id: str, vault_id: str) -> Dict[str, Any]:
+async def get_documents(ctx: Context, project_id: str, vault_id: str) -> Dict[str, Any]:
     """List documents in a vault.
-    
+
     Args:
         project_id: Project ID
         vault_id: Vault ID
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
     
     try:
         docs = await _run_sync(client.get_documents, project_id, vault_id)
@@ -2264,16 +2271,16 @@ async def get_documents(project_id: str, vault_id: str) -> Dict[str, Any]:
         }
 
 @mcp.tool()
-async def get_document(project_id: str, document_id: str) -> Dict[str, Any]:
+async def get_document(ctx: Context, project_id: str, document_id: str) -> Dict[str, Any]:
     """Get a single document.
-    
+
     Args:
         project_id: Project ID
         document_id: Document ID
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
     
     try:
         doc = await _run_sync(client.get_document, project_id, document_id)
@@ -2294,18 +2301,18 @@ async def get_document(project_id: str, document_id: str) -> Dict[str, Any]:
         }
 
 @mcp.tool()
-async def create_document(project_id: str, vault_id: str, title: str, content: str) -> Dict[str, Any]:
+async def create_document(ctx: Context, project_id: str, vault_id: str, title: str, content: str) -> Dict[str, Any]:
     """Create a document in a vault.
-    
+
     Args:
         project_id: Project ID
         vault_id: Vault ID
         title: Document title
         content: Document HTML content
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
     
     try:
         doc = await _run_sync(client.create_document, project_id, vault_id, title, content)
@@ -2326,18 +2333,18 @@ async def create_document(project_id: str, vault_id: str, title: str, content: s
         }
 
 @mcp.tool()
-async def update_document(project_id: str, document_id: str, title: Optional[str] = None, content: Optional[str] = None) -> Dict[str, Any]:
+async def update_document(ctx: Context, project_id: str, document_id: str, title: Optional[str] = None, content: Optional[str] = None) -> Dict[str, Any]:
     """Update a document.
-    
+
     Args:
         project_id: Project ID
         document_id: Document ID
         title: New title
         content: New HTML content
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
     
     try:
         doc = await _run_sync(client.update_document, project_id, document_id, title, content)
@@ -2358,16 +2365,16 @@ async def update_document(project_id: str, document_id: str, title: Optional[str
         }
 
 @mcp.tool()
-async def trash_document(project_id: str, document_id: str) -> Dict[str, Any]:
+async def trash_document(ctx: Context, project_id: str, document_id: str) -> Dict[str, Any]:
     """Move a document to trash.
-    
+
     Args:
         project_id: Project ID
         document_id: Document ID
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
     
     try:
         await _run_sync(client.trash_document, project_id, document_id)
@@ -2389,16 +2396,16 @@ async def trash_document(project_id: str, document_id: str) -> Dict[str, Any]:
 
 # Upload Management
 @mcp.tool()
-async def get_uploads(project_id: str, vault_id: Optional[str] = None) -> Dict[str, Any]:
+async def get_uploads(ctx: Context, project_id: str, vault_id: Optional[str] = None) -> Dict[str, Any]:
     """List uploads in a project or vault.
-    
+
     Args:
         project_id: Project ID
         vault_id: Optional vault ID to limit to specific vault
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
     
     try:
         uploads = await _run_sync(client.get_uploads, project_id, vault_id)
@@ -2420,16 +2427,16 @@ async def get_uploads(project_id: str, vault_id: Optional[str] = None) -> Dict[s
         }
 
 @mcp.tool()
-async def get_upload(project_id: str, upload_id: str) -> Dict[str, Any]:
+async def get_upload(ctx: Context, project_id: str, upload_id: str) -> Dict[str, Any]:
     """Get details for a specific upload.
-    
+
     Args:
         project_id: Project ID
         upload_id: Upload ID
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
     
     try:
         upload = await _run_sync(client.get_upload, project_id, upload_id)
