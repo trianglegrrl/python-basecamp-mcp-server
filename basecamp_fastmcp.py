@@ -348,15 +348,15 @@ async def search_basecamp(ctx: Context, query: str, project_id: Optional[str] = 
         }
 
 @mcp.tool()
-async def get_todolists(project_id: str) -> Dict[str, Any]:
+async def get_todolists(ctx: Context, project_id: str) -> Dict[str, Any]:
     """Get todo lists for a project.
-    
+
     Args:
         project_id: The project ID
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
     
     try:
         todolists = await _run_sync(client.get_todolists, project_id)
@@ -378,16 +378,16 @@ async def get_todolists(project_id: str) -> Dict[str, Any]:
         }
 
 @mcp.tool()
-async def get_todos(project_id: str, todolist_id: str) -> Dict[str, Any]:
+async def get_todos(ctx: Context, project_id: str, todolist_id: str) -> Dict[str, Any]:
     """Get todos from a todo list.
-    
+
     Args:
         project_id: Project ID
         todolist_id: The todo list ID
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
     
     try:
         todos = await _run_sync(client.get_todos, project_id, todolist_id)
@@ -409,16 +409,16 @@ async def get_todos(project_id: str, todolist_id: str) -> Dict[str, Any]:
         }
 
 @mcp.tool()
-async def get_todo(project_id: str, todo_id: str) -> Dict[str, Any]:
+async def get_todo(ctx: Context, project_id: str, todo_id: str) -> Dict[str, Any]:
     """Get a single todo item by its ID.
 
     Args:
         project_id: Project ID
         todo_id: The todo ID
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
 
     try:
         todo = await _run_sync(client.get_todo, project_id, todo_id)
@@ -439,15 +439,15 @@ async def get_todo(project_id: str, todo_id: str) -> Dict[str, Any]:
         }
 
 @mcp.tool()
-async def create_todo(project_id: str, todolist_id: str, content: str, 
-                     description: Optional[str] = None, 
+async def create_todo(ctx: Context, project_id: str, todolist_id: str, content: str,
+                     description: Optional[str] = None,
                      assignee_ids: Optional[List[str]] = None,
-                     completion_subscriber_ids: Optional[List[str]] = None, 
-                     notify: bool = False, 
-                     due_on: Optional[str] = None, 
+                     completion_subscriber_ids: Optional[List[str]] = None,
+                     notify: bool = False,
+                     due_on: Optional[str] = None,
                      starts_on: Optional[str] = None) -> Dict[str, Any]:
     """Create a new todo item in a todo list.
-    
+
     Args:
         project_id: Project ID
         todolist_id: The todo list ID
@@ -459,9 +459,9 @@ async def create_todo(project_id: str, todolist_id: str, content: str,
         due_on: Due date in YYYY-MM-DD format
         starts_on: Start date in YYYY-MM-DD format
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
     
     try:
         # Use lambda to properly handle keyword arguments
@@ -494,16 +494,16 @@ async def create_todo(project_id: str, todolist_id: str, content: str,
         }
 
 @mcp.tool()
-async def update_todo(project_id: str, todo_id: str, 
+async def update_todo(ctx: Context, project_id: str, todo_id: str,
                      content: Optional[str] = None,
-                     description: Optional[str] = None, 
+                     description: Optional[str] = None,
                      assignee_ids: Optional[List[str]] = None,
                      completion_subscriber_ids: Optional[List[str]] = None,
                      notify: Optional[bool] = None,
-                     due_on: Optional[str] = None, 
+                     due_on: Optional[str] = None,
                      starts_on: Optional[str] = None) -> Dict[str, Any]:
     """Update an existing todo item.
-    
+
     Args:
         project_id: Project ID
         todo_id: The todo ID
@@ -514,9 +514,9 @@ async def update_todo(project_id: str, todo_id: str,
         due_on: Due date in YYYY-MM-DD format
         starts_on: Start date in YYYY-MM-DD format
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
     
     try:
         # Guard against no-op updates
@@ -558,7 +558,7 @@ async def update_todo(project_id: str, todo_id: str,
         }
 
 @mcp.tool()
-async def delete_todo(project_id: str, todo_id: str) -> Dict[str, Any]:
+async def delete_todo(ctx: Context, project_id: str, todo_id: str) -> Dict[str, Any]:
     """Move a todo item to the trash.
 
     Trashed todos can be recovered from the Basecamp web UI within 30 days.
@@ -567,9 +567,9 @@ async def delete_todo(project_id: str, todo_id: str) -> Dict[str, Any]:
         project_id: Project ID
         todo_id: The todo ID
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
 
     try:
         await _run_sync(client.delete_todo, project_id, todo_id)
@@ -590,16 +590,16 @@ async def delete_todo(project_id: str, todo_id: str) -> Dict[str, Any]:
         }
 
 @mcp.tool()
-async def complete_todo(project_id: str, todo_id: str) -> Dict[str, Any]:
+async def complete_todo(ctx: Context, project_id: str, todo_id: str) -> Dict[str, Any]:
     """Mark a todo item as complete.
-    
+
     Args:
         project_id: Project ID
         todo_id: The todo ID
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
     
     try:
         completion = await _run_sync(client.complete_todo, project_id, todo_id)
@@ -621,16 +621,16 @@ async def complete_todo(project_id: str, todo_id: str) -> Dict[str, Any]:
         }
 
 @mcp.tool()
-async def uncomplete_todo(project_id: str, todo_id: str) -> Dict[str, Any]:
+async def uncomplete_todo(ctx: Context, project_id: str, todo_id: str) -> Dict[str, Any]:
     """Mark a todo item as incomplete.
-    
+
     Args:
         project_id: Project ID
         todo_id: The todo ID
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
     
     try:
         await _run_sync(client.uncomplete_todo, project_id, todo_id)
@@ -651,7 +651,7 @@ async def uncomplete_todo(project_id: str, todo_id: str) -> Dict[str, Any]:
         }
 
 @mcp.tool()
-async def archive_todo(project_id: str, todo_id: str) -> Dict[str, Any]:
+async def archive_todo(ctx: Context, project_id: str, todo_id: str) -> Dict[str, Any]:
     """Archive a todo item.
 
     Archived todos are hidden from the active list but remain accessible
@@ -661,9 +661,9 @@ async def archive_todo(project_id: str, todo_id: str) -> Dict[str, Any]:
         project_id: Project ID
         todo_id: The todo ID
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
 
     try:
         await _run_sync(client.archive_todo, project_id, todo_id)
@@ -677,6 +677,7 @@ async def archive_todo(project_id: str, todo_id: str) -> Dict[str, Any]:
 
 @mcp.tool()
 async def reposition_todo(
+    ctx: Context,
     project_id: str,
     todo_id: str,
     position: int,
@@ -691,9 +692,9 @@ async def reposition_todo(
         parent_id: ID of the target todolist or group to move the todo into.
                    Omit to keep the todo in its current list and only change position.
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
 
     if position < 1:
         return {"error": "Invalid input", "message": "position must be >= 1"}
@@ -2449,16 +2450,16 @@ async def get_upload(project_id: str, upload_id: str) -> Dict[str, Any]:
         }
 
 @mcp.tool()
-async def get_todolist(project_id: str, todolist_id: str) -> Dict[str, Any]:
+async def get_todolist(ctx: Context, project_id: str, todolist_id: str) -> Dict[str, Any]:
     """Get a specific todo list by ID.
 
     Args:
         project_id: The project ID
         todolist_id: The todo list ID
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
 
     try:
         todolist = await _run_sync(client.get_todolist, project_id, todolist_id)
@@ -2472,6 +2473,7 @@ async def get_todolist(project_id: str, todolist_id: str) -> Dict[str, Any]:
 
 @mcp.tool()
 async def create_todolist(
+    ctx: Context,
     project_id: str,
     name: str,
     description: Optional[str] = None,
@@ -2483,9 +2485,9 @@ async def create_todolist(
         name: Todo list name
         description: Optional HTML description
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
 
     try:
         todolist = await _run_sync(
@@ -2501,6 +2503,7 @@ async def create_todolist(
 
 @mcp.tool()
 async def update_todolist(
+    ctx: Context,
     project_id: str,
     todolist_id: str,
     name: str,
@@ -2516,9 +2519,9 @@ async def update_todolist(
         name: Todo list name (required)
         description: Optional HTML description
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
 
     try:
         todolist = await _run_sync(
@@ -2533,7 +2536,7 @@ async def update_todolist(
 
 
 @mcp.tool()
-async def trash_todolist(project_id: str, todolist_id: str) -> Dict[str, Any]:
+async def trash_todolist(ctx: Context, project_id: str, todolist_id: str) -> Dict[str, Any]:
     """Move a todo list to the trash.
 
     Trashed lists can be recovered from the Basecamp web UI within 30 days.
@@ -2542,9 +2545,9 @@ async def trash_todolist(project_id: str, todolist_id: str) -> Dict[str, Any]:
         project_id: The project ID
         todolist_id: The todo list ID
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
 
     try:
         await _run_sync(client.trash_todolist, project_id, todolist_id)
@@ -2557,7 +2560,7 @@ async def trash_todolist(project_id: str, todolist_id: str) -> Dict[str, Any]:
 
 
 @mcp.tool()
-async def get_todolist_groups(project_id: str, todolist_id: str) -> Dict[str, Any]:
+async def get_todolist_groups(ctx: Context, project_id: str, todolist_id: str) -> Dict[str, Any]:
     """Get all groups in a todo list.
 
     Groups are named sections within a todo list (e.g. "Phase 1", "Backlog").
@@ -2566,9 +2569,9 @@ async def get_todolist_groups(project_id: str, todolist_id: str) -> Dict[str, An
         project_id: The project ID
         todolist_id: The todo list ID
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
 
     try:
         groups = await _run_sync(client.get_todolist_groups, project_id, todolist_id)
@@ -2582,6 +2585,7 @@ async def get_todolist_groups(project_id: str, todolist_id: str) -> Dict[str, An
 
 @mcp.tool()
 async def create_todolist_group(
+    ctx: Context,
     project_id: str,
     todolist_id: str,
     name: str,
@@ -2598,9 +2602,9 @@ async def create_todolist_group(
         color: Optional color – one of: white, red, orange, yellow, green,
                blue, aqua, purple, gray, pink, brown
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
 
     try:
         group = await _run_sync(
@@ -2616,7 +2620,7 @@ async def create_todolist_group(
 
 @mcp.tool()
 async def reposition_todolist_group(
-    project_id: str, group_id: str, position: int
+    ctx: Context, project_id: str, group_id: str, position: int
 ) -> Dict[str, Any]:
     """Reposition a todo list group to a new location within its list.
 
@@ -2625,9 +2629,9 @@ async def reposition_todolist_group(
         group_id: The group ID
         position: New 1-based position
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
 
     if position < 1:
         return {"error": "Invalid input", "message": "position must be >= 1"}
