@@ -250,11 +250,11 @@ async def _run_sync(func, *args, **kwargs):
 #   Batch F — documents / uploads / webhooks / events                 (11 tools)
 
 @mcp.tool()
-async def get_projects() -> Dict[str, Any]:
+async def get_projects(ctx: Context) -> Dict[str, Any]:
     """Get all Basecamp projects."""
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
     
     try:
         projects = await _run_sync(client.get_projects)
@@ -276,15 +276,15 @@ async def get_projects() -> Dict[str, Any]:
         }
 
 @mcp.tool()
-async def get_project(project_id: str) -> Dict[str, Any]:
+async def get_project(ctx: Context, project_id: str) -> Dict[str, Any]:
     """Get details for a specific project.
-    
+
     Args:
         project_id: The project ID
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
     
     try:
         project = await _run_sync(client.get_project, project_id)
@@ -305,16 +305,16 @@ async def get_project(project_id: str) -> Dict[str, Any]:
         }
 
 @mcp.tool()
-async def search_basecamp(query: str, project_id: Optional[str] = None) -> Dict[str, Any]:
+async def search_basecamp(ctx: Context, query: str, project_id: Optional[str] = None) -> Dict[str, Any]:
     """Search across Basecamp projects, todos, and messages.
-    
+
     Args:
         query: Search query
         project_id: Optional project ID to limit search scope
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
     
     try:
         search = BasecampSearch(client=client)
@@ -711,15 +711,15 @@ async def reposition_todo(
 
 
 @mcp.tool()
-async def global_search(query: str) -> Dict[str, Any]:
+async def global_search(ctx: Context, query: str) -> Dict[str, Any]:
     """Search projects, todos and campfire messages across all projects.
-    
+
     Args:
         query: Search query
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
     
     try:
         search = BasecampSearch(client=client)
