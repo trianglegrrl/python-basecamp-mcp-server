@@ -1027,7 +1027,7 @@ class MCPServer:
                 recording_id = arguments.get("recording_id")
                 project_id = arguments.get("project_id")
                 page = arguments.get("page", 1)
-                result = client.get_comments(project_id, recording_id, page)
+                result = client.get_comments(recording_id, project_id, page)
                 return {
                     "status": "success",
                     "comments": result["comments"],

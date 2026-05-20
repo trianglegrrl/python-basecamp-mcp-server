@@ -464,7 +464,7 @@ class BasecampSearch:
         try:
             # If both recording_id and bucket_id are provided, get comments for that specific recording
             if recording_id and bucket_id:
-                result = self.client.get_comments(bucket_id, recording_id, page)
+                result = self.client.get_comments(recording_id, bucket_id, page)
                 comments = result["comments"]
                 pagination = {
                     "total_count": result["total_count"],
