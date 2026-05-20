@@ -743,7 +743,7 @@ async def global_search(ctx: Context, query: str) -> Dict[str, Any]:
         }
 
 @mcp.tool()
-async def get_comments(recording_id: str, project_id: str, page: int = 1) -> Dict[str, Any]:
+async def get_comments(ctx: Context, recording_id: str, project_id: str, page: int = 1) -> Dict[str, Any]:
     """Get comments for a Basecamp item.
 
     Args:
@@ -752,9 +752,9 @@ async def get_comments(recording_id: str, project_id: str, page: int = 1) -> Dic
         page: Page number for pagination (default: 1). Basecamp uses geared pagination:
               page 1 has 15 results, page 2 has 30, page 3 has 50, page 4+ has 100.
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
 
     try:
         result = await _run_sync(client.get_comments, project_id, recording_id, page)
@@ -779,7 +779,7 @@ async def get_comments(recording_id: str, project_id: str, page: int = 1) -> Dic
         }
 
 @mcp.tool()
-async def create_comment(recording_id: str, project_id: str, content: str) -> Dict[str, Any]:
+async def create_comment(ctx: Context, recording_id: str, project_id: str, content: str) -> Dict[str, Any]:
     """Create a comment on a Basecamp item.
 
     Args:
@@ -787,9 +787,9 @@ async def create_comment(recording_id: str, project_id: str, content: str) -> Di
         project_id: The project ID
         content: The comment content in HTML format
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
 
     try:
         comment = await _run_sync(client.create_comment, recording_id, project_id, content)
@@ -811,16 +811,16 @@ async def create_comment(recording_id: str, project_id: str, content: str) -> Di
         }
 
 @mcp.tool()
-async def get_campfire_lines(project_id: str, campfire_id: str) -> Dict[str, Any]:
+async def get_campfire_lines(ctx: Context, project_id: str, campfire_id: str) -> Dict[str, Any]:
     """Get recent messages from a Basecamp campfire (chat room).
-    
+
     Args:
         project_id: The project ID
         campfire_id: The campfire/chat room ID
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
     
     try:
         lines = await _run_sync(client.get_campfire_lines, project_id, campfire_id)
@@ -842,15 +842,15 @@ async def get_campfire_lines(project_id: str, campfire_id: str) -> Dict[str, Any
         }
 
 @mcp.tool()
-async def get_message_board(project_id: str) -> Dict[str, Any]:
+async def get_message_board(ctx: Context, project_id: str) -> Dict[str, Any]:
     """Get the message board for a project.
 
     Args:
         project_id: The project ID
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
 
     try:
         message_board = await _run_sync(client.get_message_board, project_id)
@@ -871,16 +871,16 @@ async def get_message_board(project_id: str) -> Dict[str, Any]:
         }
 
 @mcp.tool()
-async def get_messages(project_id: str, message_board_id: Optional[str] = None) -> Dict[str, Any]:
+async def get_messages(ctx: Context, project_id: str, message_board_id: Optional[str] = None) -> Dict[str, Any]:
     """Get all messages from a project's message board.
 
     Args:
         project_id: The project ID
         message_board_id: Optional message board ID. If not provided, will be auto-discovered from the project.
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
 
     try:
         messages = await _run_sync(client.get_messages, project_id, message_board_id)
@@ -902,16 +902,16 @@ async def get_messages(project_id: str, message_board_id: Optional[str] = None) 
         }
 
 @mcp.tool()
-async def get_message(project_id: str, message_id: str) -> Dict[str, Any]:
+async def get_message(ctx: Context, project_id: str, message_id: str) -> Dict[str, Any]:
     """Get a specific message by ID.
 
     Args:
         project_id: The project ID
         message_id: The message ID
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
 
     try:
         message = await _run_sync(client.get_message, project_id, message_id)
@@ -933,15 +933,15 @@ async def get_message(project_id: str, message_id: str) -> Dict[str, Any]:
 
 
 @mcp.tool()
-async def get_message_categories(project_id: str) -> Dict[str, Any]:
+async def get_message_categories(ctx: Context, project_id: str) -> Dict[str, Any]:
     """Get message categories (types) for a project.
 
     Args:
         project_id: The project ID
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
 
     try:
         categories = await _run_sync(client.get_message_categories, project_id)
@@ -964,7 +964,7 @@ async def get_message_categories(project_id: str) -> Dict[str, Any]:
 
 
 @mcp.tool()
-async def create_message(project_id: str, subject: str, content: str,
+async def create_message(ctx: Context, project_id: str, subject: str, content: str,
                          message_board_id: Optional[str] = None,
                          category_id: Optional[str] = None) -> Dict[str, Any]:
     """Create a new message on a project's message board.
@@ -976,9 +976,9 @@ async def create_message(project_id: str, subject: str, content: str,
         message_board_id: Optional message board ID. If not provided, will be auto-discovered from the project.
         category_id: Optional message type/category ID
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
 
     try:
         message = await _run_sync(
@@ -1008,15 +1008,15 @@ async def create_message(project_id: str, subject: str, content: str,
 
 # Inbox Tools (Email Forwards)
 @mcp.tool()
-async def get_inbox(project_id: str) -> Dict[str, Any]:
+async def get_inbox(ctx: Context, project_id: str) -> Dict[str, Any]:
     """Get the inbox for a project (for email forwards).
 
     Args:
         project_id: The project ID
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
 
     try:
         inbox = await _run_sync(client.get_inbox, project_id)
@@ -1038,16 +1038,16 @@ async def get_inbox(project_id: str) -> Dict[str, Any]:
 
 
 @mcp.tool()
-async def get_forwards(project_id: str, inbox_id: Optional[str] = None) -> Dict[str, Any]:
+async def get_forwards(ctx: Context, project_id: str, inbox_id: Optional[str] = None) -> Dict[str, Any]:
     """Get all forwarded emails from a project's inbox.
 
     Args:
         project_id: The project ID
         inbox_id: Optional inbox ID. If not provided, will be auto-discovered from the project.
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
 
     try:
         forwards = await _run_sync(client.get_forwards, project_id, inbox_id)
@@ -1070,16 +1070,16 @@ async def get_forwards(project_id: str, inbox_id: Optional[str] = None) -> Dict[
 
 
 @mcp.tool()
-async def get_forward(project_id: str, forward_id: str) -> Dict[str, Any]:
+async def get_forward(ctx: Context, project_id: str, forward_id: str) -> Dict[str, Any]:
     """Get a specific forwarded email by ID.
 
     Args:
         project_id: The project ID
         forward_id: The forward ID
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
 
     try:
         forward = await _run_sync(client.get_forward, project_id, forward_id)
@@ -1101,16 +1101,16 @@ async def get_forward(project_id: str, forward_id: str) -> Dict[str, Any]:
 
 
 @mcp.tool()
-async def get_inbox_replies(project_id: str, forward_id: str) -> Dict[str, Any]:
+async def get_inbox_replies(ctx: Context, project_id: str, forward_id: str) -> Dict[str, Any]:
     """Get all replies to a forwarded email.
 
     Args:
         project_id: The project ID
         forward_id: The forward ID
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
 
     try:
         replies = await _run_sync(client.get_inbox_replies, project_id, forward_id)
@@ -1133,7 +1133,7 @@ async def get_inbox_replies(project_id: str, forward_id: str) -> Dict[str, Any]:
 
 
 @mcp.tool()
-async def get_inbox_reply(project_id: str, forward_id: str, reply_id: str) -> Dict[str, Any]:
+async def get_inbox_reply(ctx: Context, project_id: str, forward_id: str, reply_id: str) -> Dict[str, Any]:
     """Get a specific reply to a forwarded email.
 
     Args:
@@ -1141,9 +1141,9 @@ async def get_inbox_reply(project_id: str, forward_id: str, reply_id: str) -> Di
         forward_id: The forward ID
         reply_id: The reply ID
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
 
     try:
         reply = await _run_sync(client.get_inbox_reply, project_id, forward_id, reply_id)
@@ -1165,16 +1165,16 @@ async def get_inbox_reply(project_id: str, forward_id: str, reply_id: str) -> Di
 
 
 @mcp.tool()
-async def trash_forward(project_id: str, forward_id: str) -> Dict[str, Any]:
+async def trash_forward(ctx: Context, project_id: str, forward_id: str) -> Dict[str, Any]:
     """Move a forwarded email to trash.
 
     Args:
         project_id: The project ID
         forward_id: The forward ID
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
 
     try:
         await _run_sync(client.trash_forward, project_id, forward_id)
