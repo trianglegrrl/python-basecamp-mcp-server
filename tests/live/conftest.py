@@ -80,11 +80,14 @@ def prefix(run_id) -> str:
     return f'[mcp-test-{run_id}]'
 
 
-@pytest.fixture
+@pytest.fixture(scope='session')
 def id_store(run_id):
-    """Per-test recorder — appends to .test-live-ids-<run_id>.json in the
+    """Per-run recorder — appends to .test-live-ids-<run_id>.json in the
     repo root. The cleanup script (scripts/test_live_cleanup.py) reads
-    every .test-live-ids-*.json file it finds and trashes the IDs."""
+    every .test-live-ids-*.json file it finds and trashes the IDs.
+
+    Session-scoped: module-scoped fixtures (todolist_id, column_id) depend
+    on it, and a fixture may only use same-or-broader-scoped fixtures."""
     path = REPO_ROOT / f'.test-live-ids-{run_id}.json'
 
     def record(recording_id: str, project_id: str, kind: str):
