@@ -356,6 +356,34 @@ The project uses the **official Anthropic FastMCP framework** for maximum reliab
    - `generate_codex_config.py` - For Codex CLI integration
    - `generate_claude_desktop_config.py` - For Claude Desktop integration
 
+## Tool signature (post v1.1)
+
+Every `@mcp.tool()` accepts a FastMCP `Context` as its first parameter and
+resolves credentials via the active `CredentialProvider`:
+
+```python
+from mcp.server.fastmcp import Context
+
+@mcp.tool()
+async def get_projects(ctx: Context) -> Dict[str, Any]:
+    client = _get_basecamp_client(ctx)
+    if not client:
+        return _get_auth_error_response(ctx)
+    ...
+```
+
+The provider is selected at process startup by the `--transport` flag:
+
+- `--transport stdio` (default, OSS path) → `FileCredentialProvider` reads
+  `oauth_tokens.json` + env vars. Use `python oauth_app.py` for the one-time
+  browser dance.
+- `--transport streamable-http` (hosted path) → `HeaderCredentialProvider`
+  reads `Authorization: Bearer <token>` and `X-Basecamp-Account-Id` from each
+  incoming request. The hosting proxy handles OAuth refresh.
+
+See `auth/README.md` for the provider abstraction; `scripts/smoke_streamable_http.py`
+for the HTTP handshake.
+
 ## Troubleshooting
 
 ### Common Issues (Both Clients)

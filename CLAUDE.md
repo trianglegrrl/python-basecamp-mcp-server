@@ -94,17 +94,19 @@ Basecamp 3 API (https://3.basecampapi.com/{account_id})
 
 ```python
 # In basecamp_fastmcp.py
+from mcp.server.fastmcp import Context
+
 @mcp.tool()
-async def new_tool_name(project_id: str, other_param: Optional[str] = None) -> Dict[str, Any]:
+async def new_tool_name(ctx: Context, project_id: str, other_param: Optional[str] = None) -> Dict[str, Any]:
     """Tool description shown to AI.
 
     Args:
         project_id: The project ID
         other_param: Optional description
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
 
     try:
         result = await _run_sync(client.some_method, project_id, other_param)
@@ -113,6 +115,12 @@ async def new_tool_name(project_id: str, other_param: Optional[str] = None) -> D
         logger.error(f"Error: {e}")
         return {"error": "Execution error", "message": str(e)}
 ```
+
+Every tool takes `ctx: Context` as its first parameter and resolves credentials
+via the active `CredentialProvider`, selected at process startup by the
+`--transport` flag (`stdio` → `FileCredentialProvider`; `streamable-http` →
+`HeaderCredentialProvider`). `_get_basecamp_client(ctx)` and
+`_get_auth_error_response(ctx)` both require `ctx` — there is no no-args form.
 
 ### Adding Basecamp API Methods
 

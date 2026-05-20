@@ -87,3 +87,11 @@ def test_returns_none_when_ctx_lacks_request_context():
     credentials_for returns None rather than propagating."""
     ctx = MagicMock(spec=[])  # spec=[] → any attribute access raises AttributeError
     assert HeaderCredentialProvider().credentials_for(ctx) is None
+
+
+def test_raises_type_error_when_ctx_is_none():
+    """After Chunk 4 cleanup, HeaderCredentialProvider rejects ctx=None as a
+    contract violation — no production call site can pass None anymore."""
+    p = HeaderCredentialProvider()
+    with pytest.raises(TypeError, match='ctx'):
+        p.credentials_for(None)  # type: ignore[arg-type]

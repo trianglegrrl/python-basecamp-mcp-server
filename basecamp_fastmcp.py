@@ -106,45 +106,34 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 mcp = FastMCP("basecamp", lifespan=_module_lifespan)
 
 # Auth helper functions (reused from original server)
-def _get_basecamp_client(ctx: Optional[Context] = None) -> Optional[BasecampClient]:
-    """Construct a per-request BasecampClient.
+def _get_basecamp_client(ctx: Context) -> Optional[BasecampClient]:
+    """Construct a per-request BasecampClient via the active CredentialProvider.
 
-    With ctx (branch-a): read the active CredentialProvider out of the FastMCP
-    lifespan context — ctx.request_context.lifespan_context["provider"] — and
-    ask it for credentials. One provider per server lifetime; the transport
-    (stdio vs streamable-http) decided which concrete provider the lifespan
-    installed.
-
-    Without ctx ([LEGACY_NO_ARGS_GET_CLIENT] — removed in Chunk 4): falls back
-    to the pre-provider file+env path so the 75 not-yet-migrated tools keep
-    working until Chunk 3 migrates them to take ctx.
+    The provider lives in the FastMCP lifespan context — read it via
+    _provider_from_ctx(ctx). The caller MUST pass a Context; the legacy no-args
+    path was removed in PR T3 once all 75 tools took ctx.
     """
-    if ctx is not None:
-        try:
-            provider = _provider_from_ctx(ctx)
-            if provider is None:
-                logger.error("_get_basecamp_client: ctx supplied but no provider "
-                             "in lifespan_context — server lifespan misconfigured")
-                return None
-            creds = provider.credentials_for(ctx)
-            if creds is None:
-                return None
-            user_agent = os.getenv('USER_AGENT') or "Basecamp MCP Server (mcp@basecamp-server.dev)"
-            return BasecampClient(
-                access_token=creds.access_token,
-                account_id=creds.account_id,
-                user_agent=user_agent,
-                auth_mode='oauth',
-            )
-        except Exception as e:
-            # Symmetric with _legacy_get_basecamp_client: an unexpected error
-            # (provider lookup, credential resolution, client construction)
-            # degrades to None so the tool returns its standard auth-error
-            # response — never an uncaught exception out of a tool handler.
-            logger.error(f"Error creating Basecamp client (provider path): {e}")
+    try:
+        provider = _provider_from_ctx(ctx)
+        if provider is None:
+            logger.error("_get_basecamp_client: no provider in lifespan_context "
+                         "— server lifespan misconfigured")
             return None
-    # [LEGACY_NO_ARGS_GET_CLIENT] used by tools not yet migrated; removed in Chunk 4.
-    return _legacy_get_basecamp_client()
+        creds = provider.credentials_for(ctx)
+        if creds is None:
+            return None
+        user_agent = os.getenv('USER_AGENT') or "Basecamp MCP Server (mcp@basecamp-server.dev)"
+        return BasecampClient(
+            access_token=creds.access_token,
+            account_id=creds.account_id,
+            user_agent=user_agent,
+            auth_mode='oauth',
+        )
+    except Exception as e:
+        # Name the exception type so an operator can tell a misconfigured
+        # lifespan from a network fault from a programming bug at a glance.
+        logger.error("Error creating Basecamp client: %s: %s", type(e).__name__, e)
+        return None
 
 
 def _provider_from_ctx(ctx: Context) -> Optional[CredentialProvider]:
@@ -165,60 +154,7 @@ def _provider_from_ctx(ctx: Context) -> Optional[CredentialProvider]:
     return None
 
 
-def _legacy_get_basecamp_client() -> Optional[BasecampClient]:
-    """[LEGACY_NO_ARGS_GET_CLIENT] The pre-provider single-user path — a verbatim
-    copy of the original no-args _get_basecamp_client() body, so the 75
-    not-yet-migrated tools keep their exact pre-migration behavior (including
-    diagnostic logging). Removed in Chunk 4 once every tool takes ctx.
-
-    Grep for `LEGACY_NO_ARGS_GET_CLIENT` to find every reference to remove."""
-    try:
-        token_data = token_storage.get_token()
-        logger.debug(
-            "Token data retrieved: has_access_token=%s has_refresh_token=%s account_id=%s expires_at=%s",
-            bool(token_data and token_data.get('access_token')),
-            bool(token_data and token_data.get('refresh_token')),
-            token_data.get('account_id') if token_data else None,
-            token_data.get('expires_at') if token_data else None,
-        )
-
-        if not token_data or not token_data.get('access_token'):
-            logger.error("No OAuth token available")
-            return None
-
-        # Check and automatically refresh if token is expired
-        if not auth_manager.ensure_authenticated():
-            logger.error("OAuth token has expired and automatic refresh failed")
-            return None
-
-        # Get fresh token data after potential refresh
-        token_data = token_storage.get_token()
-
-        # Get account_id from token data first, then fall back to env var
-        account_id = token_data.get('account_id') or os.getenv('BASECAMP_ACCOUNT_ID')
-        user_agent = os.getenv('USER_AGENT') or "Basecamp MCP Server (cursor@example.com)"
-
-        if not account_id:
-            logger.error(
-                "Missing account_id. token_account_id=%s env_BASECAMP_ACCOUNT_ID=%s",
-                token_data.get('account_id') if token_data else None,
-                os.getenv('BASECAMP_ACCOUNT_ID'),
-            )
-            return None
-
-        logger.debug(f"Creating Basecamp client with account_id: {account_id}, user_agent: {user_agent}")
-
-        return BasecampClient(
-            access_token=token_data['access_token'],
-            account_id=account_id,
-            user_agent=user_agent,
-            auth_mode='oauth'
-        )
-    except Exception as e:
-        logger.error(f"Error creating Basecamp client: {e}")
-        return None
-
-def _get_auth_error_response(ctx: Optional[Context] = None) -> Dict[str, Any]:
+def _get_auth_error_response(ctx: Context) -> Dict[str, Any]:
     """Return a consistent auth-error response dict.
 
     Accepts `ctx` because every ctx-migrated tool calls this as
