@@ -218,8 +218,15 @@ def _legacy_get_basecamp_client() -> Optional[BasecampClient]:
         logger.error(f"Error creating Basecamp client: {e}")
         return None
 
-def _get_auth_error_response() -> Dict[str, Any]:
-    """Return consistent auth error response."""
+def _get_auth_error_response(ctx: Optional[Context] = None) -> Dict[str, Any]:
+    """Return a consistent auth-error response dict.
+
+    Accepts `ctx` because every ctx-migrated tool calls this as
+    `_get_auth_error_response(ctx)`. The message is currently transport-agnostic
+    so `ctx` is not read — it keeps the 75 call sites uniform and is the seam
+    for a future transport-aware error message.
+    """
+    del ctx  # accepted for call-site uniformity; not used by the current message
     if token_storage.is_token_expired():
         return {
             "error": "OAuth token expired",
