@@ -106,8 +106,72 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 mcp = FastMCP("basecamp", lifespan=_module_lifespan)
 
 # Auth helper functions (reused from original server)
-def _get_basecamp_client() -> Optional[BasecampClient]:
-    """Get authenticated Basecamp client (sync version from original server)."""
+def _get_basecamp_client(ctx: Optional[Context] = None) -> Optional[BasecampClient]:
+    """Construct a per-request BasecampClient.
+
+    With ctx (branch-a): read the active CredentialProvider out of the FastMCP
+    lifespan context — ctx.request_context.lifespan_context["provider"] — and
+    ask it for credentials. One provider per server lifetime; the transport
+    (stdio vs streamable-http) decided which concrete provider the lifespan
+    installed.
+
+    Without ctx ([LEGACY_NO_ARGS_GET_CLIENT] — removed in Chunk 4): falls back
+    to the pre-provider file+env path so the 75 not-yet-migrated tools keep
+    working until Chunk 3 migrates them to take ctx.
+    """
+    if ctx is not None:
+        try:
+            provider = _provider_from_ctx(ctx)
+            if provider is None:
+                logger.error("_get_basecamp_client: ctx supplied but no provider "
+                             "in lifespan_context — server lifespan misconfigured")
+                return None
+            creds = provider.credentials_for(ctx)
+            if creds is None:
+                return None
+            user_agent = os.getenv('USER_AGENT') or "Basecamp MCP Server (mcp@basecamp-server.dev)"
+            return BasecampClient(
+                access_token=creds.access_token,
+                account_id=creds.account_id,
+                user_agent=user_agent,
+                auth_mode='oauth',
+            )
+        except Exception as e:
+            # Symmetric with _legacy_get_basecamp_client: an unexpected error
+            # (provider lookup, credential resolution, client construction)
+            # degrades to None so the tool returns its standard auth-error
+            # response — never an uncaught exception out of a tool handler.
+            logger.error(f"Error creating Basecamp client (provider path): {e}")
+            return None
+    # [LEGACY_NO_ARGS_GET_CLIENT] used by tools not yet migrated; removed in Chunk 4.
+    return _legacy_get_basecamp_client()
+
+
+def _provider_from_ctx(ctx: Context) -> Optional[CredentialProvider]:
+    """Pull the CredentialProvider out of the FastMCP lifespan context.
+
+    The lifespan (see make_lifespan) yields {"provider": <CredentialProvider>};
+    FastMCP exposes it at ctx.request_context.lifespan_context. The single
+    AttributeError catch deliberately covers BOTH attribute hops — ctx missing
+    request_context, or request_context missing lifespan_context — since either
+    means a misconfigured lifespan or an unpopulated test ctx. A non-dict
+    lifespan_context likewise yields None. The caller logs the None case."""
+    try:
+        lifespan_ctx = ctx.request_context.lifespan_context
+    except AttributeError:
+        return None
+    if isinstance(lifespan_ctx, dict):
+        return lifespan_ctx.get("provider")
+    return None
+
+
+def _legacy_get_basecamp_client() -> Optional[BasecampClient]:
+    """[LEGACY_NO_ARGS_GET_CLIENT] The pre-provider single-user path — a verbatim
+    copy of the original no-args _get_basecamp_client() body, so the 75
+    not-yet-migrated tools keep their exact pre-migration behavior (including
+    diagnostic logging). Removed in Chunk 4 once every tool takes ctx.
+
+    Grep for `LEGACY_NO_ARGS_GET_CLIENT` to find every reference to remove."""
     try:
         token_data = token_storage.get_token()
         logger.debug(
