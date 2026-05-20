@@ -80,3 +80,46 @@ class FileCredentialProvider(CredentialProvider):
             logger.error("Missing account_id (not in token, not in env)")
             return None
         return Credentials(access_token=token_data['access_token'], account_id=str(account_id))
+
+
+class HeaderCredentialProvider(CredentialProvider):
+    """Reads OAuth credentials from per-request HTTP headers.
+
+    Used in streamable-http mode behind a hosting proxy. The proxy is
+    responsible for token refresh — this provider just reads what's there.
+    If the access token is expired/invalid, the BC API returns 401 and the
+    tool surfaces that as the tool's error response.
+
+    Header path: `ctx.request_context.request.headers` (FastMCP SDK 1.10+
+    streamable-http). If the SDK changes this path, update here.
+
+    account_id is treated as an opaque non-empty string (NOT validated as
+    numeric) to stay symmetrical with FileCredentialProvider — both
+    providers defer account-id format checks to the BC API.
+    """
+
+    BEARER_PREFIX = 'bearer '
+
+    def credentials_for(self, ctx: Context) -> Credentials | None:
+        try:
+            headers = ctx.request_context.request.headers
+        except AttributeError:
+            logger.error("HeaderCredentialProvider: ctx lacks request headers")
+            return None
+
+        # FastMCP/starlette Headers expose case-insensitive .get(). If a future
+        # SDK ships a header shape without .get(), the AttributeError propagates
+        # loud — that is the cue to update here (per the docstring), which is
+        # strictly better than a silent None that masquerades as a missing header.
+        auth_header = headers.get('authorization')
+        account_id = headers.get('x-basecamp-account-id')
+
+        if not auth_header or not account_id:
+            return None
+        if not auth_header.lower().startswith(self.BEARER_PREFIX):
+            return None
+        token = auth_header[len(self.BEARER_PREFIX):].strip()
+        account_id = account_id.strip()
+        if not token or not account_id:
+            return None
+        return Credentials(access_token=token, account_id=account_id)
