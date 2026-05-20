@@ -237,6 +237,18 @@ async def _run_sync(func, *args, **kwargs):
 
 # Core MCP Tools - Starting with essential ones from original server
 
+# Tool batches for the Chunk 3 migration (PR T2). See plan §Chunk 3.
+# Each batch is one PR. Tool names per batch are the canonical list — line
+# numbers are NOT recorded here (they would rot the moment Batch A's edits
+# land; the tool list is stable, the lines are not).
+#
+#   Batch A — projects + search                                       (4 tools)
+#   Batch B — todos + todolists                                       (17 tools)
+#   Batch C — messages + campfire + comments + inbox/forwards         (14 tools)
+#   Batch D — cards / columns / check-ins                             (21 tools)
+#   Batch E — card steps + attachments                                (8 tools)
+#   Batch F — documents / uploads / webhooks / events                 (11 tools)
+
 @mcp.tool()
 async def get_projects() -> Dict[str, Any]:
     """Get all Basecamp projects."""
