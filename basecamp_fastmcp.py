@@ -130,7 +130,9 @@ def _get_basecamp_client(ctx: Context) -> Optional[BasecampClient]:
             auth_mode='oauth',
         )
     except Exception as e:
-        logger.error(f"Error creating Basecamp client: {e}")
+        # Name the exception type so an operator can tell a misconfigured
+        # lifespan from a network fault from a programming bug at a glance.
+        logger.error("Error creating Basecamp client: %s: %s", type(e).__name__, e)
         return None
 
 
