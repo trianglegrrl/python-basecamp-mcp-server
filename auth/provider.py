@@ -101,6 +101,8 @@ class HeaderCredentialProvider(CredentialProvider):
     BEARER_PREFIX = 'bearer '
 
     def credentials_for(self, ctx: Context) -> Credentials | None:
+        if ctx is None:
+            raise TypeError("HeaderCredentialProvider requires a non-None ctx")
         try:
             headers = ctx.request_context.request.headers
         except AttributeError:
