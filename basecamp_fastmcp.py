@@ -1859,16 +1859,16 @@ async def uncomplete_card(ctx: Context, project_id: str, card_id: str) -> Dict[s
 
 # Card Steps (Sub-tasks) Management
 @mcp.tool()
-async def get_card_steps(project_id: str, card_id: str) -> Dict[str, Any]:
+async def get_card_steps(ctx: Context, project_id: str, card_id: str) -> Dict[str, Any]:
     """Get all steps (sub-tasks) for a card.
-    
+
     Args:
         project_id: The project ID
         card_id: The card ID
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
     
     try:
         steps = await _run_sync(client.get_card_steps, project_id, card_id)
@@ -1890,9 +1890,9 @@ async def get_card_steps(project_id: str, card_id: str) -> Dict[str, Any]:
         }
 
 @mcp.tool()
-async def create_card_step(project_id: str, card_id: str, title: str, due_on: Optional[str] = None, assignee_ids: Optional[List[str]] = None) -> Dict[str, Any]:
+async def create_card_step(ctx: Context, project_id: str, card_id: str, title: str, due_on: Optional[str] = None, assignee_ids: Optional[List[str]] = None) -> Dict[str, Any]:
     """Create a new step (sub-task) for a card.
-    
+
     Args:
         project_id: The project ID
         card_id: The card ID
@@ -1900,9 +1900,9 @@ async def create_card_step(project_id: str, card_id: str, title: str, due_on: Op
         due_on: Optional due date (ISO 8601 format)
         assignee_ids: Array of person IDs to assign to the step
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
     
     try:
         step = await _run_sync(client.create_card_step, project_id, card_id, title, due_on, assignee_ids)
@@ -1924,16 +1924,16 @@ async def create_card_step(project_id: str, card_id: str, title: str, due_on: Op
         }
 
 @mcp.tool()
-async def get_card_step(project_id: str, step_id: str) -> Dict[str, Any]:
+async def get_card_step(ctx: Context, project_id: str, step_id: str) -> Dict[str, Any]:
     """Get details for a specific card step.
-    
+
     Args:
         project_id: The project ID
         step_id: The step ID
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
     
     try:
         step = await _run_sync(client.get_card_step, project_id, step_id)
@@ -1954,9 +1954,9 @@ async def get_card_step(project_id: str, step_id: str) -> Dict[str, Any]:
         }
 
 @mcp.tool()
-async def update_card_step(project_id: str, step_id: str, title: Optional[str] = None, due_on: Optional[str] = None, assignee_ids: Optional[List[str]] = None) -> Dict[str, Any]:
+async def update_card_step(ctx: Context, project_id: str, step_id: str, title: Optional[str] = None, due_on: Optional[str] = None, assignee_ids: Optional[List[str]] = None) -> Dict[str, Any]:
     """Update a card step.
-    
+
     Args:
         project_id: The project ID
         step_id: The step ID
@@ -1964,9 +1964,9 @@ async def update_card_step(project_id: str, step_id: str, title: Optional[str] =
         due_on: Due date (ISO 8601 format)
         assignee_ids: Array of person IDs to assign to the step
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
     
     try:
         step = await _run_sync(client.update_card_step, project_id, step_id, title, due_on, assignee_ids)
@@ -1988,16 +1988,16 @@ async def update_card_step(project_id: str, step_id: str, title: Optional[str] =
         }
 
 @mcp.tool()
-async def delete_card_step(project_id: str, step_id: str) -> Dict[str, Any]:
+async def delete_card_step(ctx: Context, project_id: str, step_id: str) -> Dict[str, Any]:
     """Delete a card step.
-    
+
     Args:
         project_id: The project ID
         step_id: The step ID
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
     
     try:
         await _run_sync(client.delete_card_step, project_id, step_id)
@@ -2018,16 +2018,16 @@ async def delete_card_step(project_id: str, step_id: str) -> Dict[str, Any]:
         }
 
 @mcp.tool()
-async def complete_card_step(project_id: str, step_id: str) -> Dict[str, Any]:
+async def complete_card_step(ctx: Context, project_id: str, step_id: str) -> Dict[str, Any]:
     """Mark a card step as complete.
-    
+
     Args:
         project_id: The project ID
         step_id: The step ID
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
     
     try:
         await _run_sync(client.complete_card_step, project_id, step_id)
@@ -2048,16 +2048,16 @@ async def complete_card_step(project_id: str, step_id: str) -> Dict[str, Any]:
         }
 
 @mcp.tool()
-async def uncomplete_card_step(project_id: str, step_id: str) -> Dict[str, Any]:
+async def uncomplete_card_step(ctx: Context, project_id: str, step_id: str) -> Dict[str, Any]:
     """Mark a card step as incomplete.
-    
+
     Args:
         project_id: The project ID
         step_id: The step ID
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
     
     try:
         await _run_sync(client.uncomplete_card_step, project_id, step_id)
@@ -2079,17 +2079,17 @@ async def uncomplete_card_step(project_id: str, step_id: str) -> Dict[str, Any]:
 
 # Attachments, Events, and Webhooks
 @mcp.tool()
-async def create_attachment(file_path: str, name: str, content_type: Optional[str] = None) -> Dict[str, Any]:
+async def create_attachment(ctx: Context, file_path: str, name: str, content_type: Optional[str] = None) -> Dict[str, Any]:
     """Upload a file as an attachment.
-    
+
     Args:
         file_path: Local path to file
         name: Filename for Basecamp
         content_type: MIME type
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
     
     try:
         result = await _run_sync(client.create_attachment, file_path, name, content_type or "application/octet-stream")
