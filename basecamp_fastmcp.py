@@ -1196,15 +1196,15 @@ async def trash_forward(ctx: Context, project_id: str, forward_id: str) -> Dict[
 
 
 @mcp.tool()
-async def get_card_tables(project_id: str) -> Dict[str, Any]:
+async def get_card_tables(ctx: Context, project_id: str) -> Dict[str, Any]:
     """Get all card tables for a project.
-    
+
     Args:
         project_id: The project ID
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
     
     try:
         card_tables = await _run_sync(client.get_card_tables, project_id)
@@ -1226,15 +1226,15 @@ async def get_card_tables(project_id: str) -> Dict[str, Any]:
         }
 
 @mcp.tool()
-async def get_card_table(project_id: str) -> Dict[str, Any]:
+async def get_card_table(ctx: Context, project_id: str) -> Dict[str, Any]:
     """Get the card table details for a project.
-    
+
     Args:
         project_id: The project ID
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
     
     try:
         card_table = await _run_sync(client.get_card_table, project_id)
@@ -1258,16 +1258,16 @@ async def get_card_table(project_id: str) -> Dict[str, Any]:
         }
 
 @mcp.tool()
-async def get_columns(project_id: str, card_table_id: str) -> Dict[str, Any]:
+async def get_columns(ctx: Context, project_id: str, card_table_id: str) -> Dict[str, Any]:
     """Get all columns in a card table.
-    
+
     Args:
         project_id: The project ID
         card_table_id: The card table ID
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
     
     try:
         columns = await _run_sync(client.get_columns, project_id, card_table_id)
@@ -1289,16 +1289,16 @@ async def get_columns(project_id: str, card_table_id: str) -> Dict[str, Any]:
         }
 
 @mcp.tool()
-async def get_cards(project_id: str, column_id: str) -> Dict[str, Any]:
+async def get_cards(ctx: Context, project_id: str, column_id: str) -> Dict[str, Any]:
     """Get all cards in a column.
-    
+
     Args:
         project_id: The project ID
         column_id: The column ID
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
     
     try:
         cards = await _run_sync(client.get_cards, project_id, column_id)
@@ -1320,9 +1320,9 @@ async def get_cards(project_id: str, column_id: str) -> Dict[str, Any]:
         }
 
 @mcp.tool()
-async def create_card(project_id: str, column_id: str, title: str, content: Optional[str] = None, due_on: Optional[str] = None, notify: bool = False) -> Dict[str, Any]:
+async def create_card(ctx: Context, project_id: str, column_id: str, title: str, content: Optional[str] = None, due_on: Optional[str] = None, notify: bool = False) -> Dict[str, Any]:
     """Create a new card in a column.
-    
+
     Args:
         project_id: The project ID
         column_id: The column ID
@@ -1331,9 +1331,9 @@ async def create_card(project_id: str, column_id: str, title: str, content: Opti
         due_on: Optional due date (ISO 8601 format)
         notify: Whether to notify assignees (default: false)
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
     
     try:
         card = await _run_sync(client.create_card, project_id, column_id, title, content, due_on, notify)
@@ -1355,16 +1355,16 @@ async def create_card(project_id: str, column_id: str, title: str, content: Opti
         }
 
 @mcp.tool()
-async def get_column(project_id: str, column_id: str) -> Dict[str, Any]:
+async def get_column(ctx: Context, project_id: str, column_id: str) -> Dict[str, Any]:
     """Get details for a specific column.
-    
+
     Args:
         project_id: The project ID
         column_id: The column ID
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
     
     try:
         column = await _run_sync(client.get_column, project_id, column_id)
@@ -1385,17 +1385,17 @@ async def get_column(project_id: str, column_id: str) -> Dict[str, Any]:
         }
 
 @mcp.tool()
-async def create_column(project_id: str, card_table_id: str, title: str) -> Dict[str, Any]:
+async def create_column(ctx: Context, project_id: str, card_table_id: str, title: str) -> Dict[str, Any]:
     """Create a new column in a card table.
-    
+
     Args:
         project_id: The project ID
         card_table_id: The card table ID
         title: The column title
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
     
     try:
         column = await _run_sync(client.create_column, project_id, card_table_id, title)
@@ -1417,17 +1417,17 @@ async def create_column(project_id: str, card_table_id: str, title: str) -> Dict
         }
 
 @mcp.tool()
-async def move_card(project_id: str, card_id: str, column_id: str) -> Dict[str, Any]:
+async def move_card(ctx: Context, project_id: str, card_id: str, column_id: str) -> Dict[str, Any]:
     """Move a card to a new column.
-    
+
     Args:
         project_id: The project ID
         card_id: The card ID
         column_id: The destination column ID
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
     
     try:
         await _run_sync(client.move_card, project_id, card_id, column_id)
@@ -1448,16 +1448,16 @@ async def move_card(project_id: str, card_id: str, column_id: str) -> Dict[str, 
         }
 
 @mcp.tool()
-async def complete_card(project_id: str, card_id: str) -> Dict[str, Any]:
+async def complete_card(ctx: Context, project_id: str, card_id: str) -> Dict[str, Any]:
     """Mark a card as complete.
-    
+
     Args:
         project_id: The project ID
         card_id: The card ID
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
     
     try:
         await _run_sync(client.complete_card, project_id, card_id)
@@ -1478,16 +1478,16 @@ async def complete_card(project_id: str, card_id: str) -> Dict[str, Any]:
         }
 
 @mcp.tool()
-async def get_card(project_id: str, card_id: str) -> Dict[str, Any]:
+async def get_card(ctx: Context, project_id: str, card_id: str) -> Dict[str, Any]:
     """Get details for a specific card.
-    
+
     Args:
         project_id: The project ID
         card_id: The card ID
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
     
     try:
         card = await _run_sync(client.get_card, project_id, card_id)
@@ -1508,9 +1508,9 @@ async def get_card(project_id: str, card_id: str) -> Dict[str, Any]:
         }
 
 @mcp.tool()
-async def update_card(project_id: str, card_id: str, title: Optional[str] = None, content: Optional[str] = None, due_on: Optional[str] = None, assignee_ids: Optional[List[str]] = None) -> Dict[str, Any]:
+async def update_card(ctx: Context, project_id: str, card_id: str, title: Optional[str] = None, content: Optional[str] = None, due_on: Optional[str] = None, assignee_ids: Optional[List[str]] = None) -> Dict[str, Any]:
     """Update a card.
-    
+
     Args:
         project_id: The project ID
         card_id: The card ID
@@ -1519,9 +1519,9 @@ async def update_card(project_id: str, card_id: str, title: Optional[str] = None
         due_on: Due date (ISO 8601 format)
         assignee_ids: Array of person IDs to assign to the card
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
     
     try:
         card = await _run_sync(client.update_card, project_id, card_id, title, content, due_on, assignee_ids)
@@ -1543,16 +1543,16 @@ async def update_card(project_id: str, card_id: str, title: Optional[str] = None
         }
 
 @mcp.tool()
-async def get_daily_check_ins(project_id: str, page: Optional[int] = None) -> Dict[str, Any]:
+async def get_daily_check_ins(ctx: Context, project_id: str, page: Optional[int] = None) -> Dict[str, Any]:
     """Get project's daily checking questionnaire.
-    
+
     Args:
         project_id: The project ID
         page: Page number paginated response
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
     
     try:
         if page is not None and not isinstance(page, int):
@@ -1576,17 +1576,17 @@ async def get_daily_check_ins(project_id: str, page: Optional[int] = None) -> Di
         }
 
 @mcp.tool()
-async def get_question_answers(project_id: str, question_id: str, page: Optional[int] = None) -> Dict[str, Any]:
+async def get_question_answers(ctx: Context, project_id: str, question_id: str, page: Optional[int] = None) -> Dict[str, Any]:
     """Get answers on daily check-in question.
-    
+
     Args:
         project_id: The project ID
         question_id: The question ID
         page: Page number paginated response
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
     
     try:
         if page is not None and not isinstance(page, int):
@@ -1611,17 +1611,17 @@ async def get_question_answers(project_id: str, question_id: str, page: Optional
 
 # Column Management Tools
 @mcp.tool()
-async def update_column(project_id: str, column_id: str, title: str) -> Dict[str, Any]:
+async def update_column(ctx: Context, project_id: str, column_id: str, title: str) -> Dict[str, Any]:
     """Update a column title.
-    
+
     Args:
         project_id: The project ID
         column_id: The column ID
         title: The new column title
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
     
     try:
         column = await _run_sync(client.update_column, project_id, column_id, title)
@@ -1643,18 +1643,18 @@ async def update_column(project_id: str, column_id: str, title: str) -> Dict[str
         }
 
 @mcp.tool()
-async def move_column(project_id: str, card_table_id: str, column_id: str, position: int) -> Dict[str, Any]:
+async def move_column(ctx: Context, project_id: str, card_table_id: str, column_id: str, position: int) -> Dict[str, Any]:
     """Move a column to a new position.
-    
+
     Args:
         project_id: The project ID
         card_table_id: The card table ID
         column_id: The column ID
         position: The new 1-based position
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
     
     try:
         await _run_sync(client.move_column, project_id, column_id, position, card_table_id)
@@ -1675,17 +1675,17 @@ async def move_column(project_id: str, card_table_id: str, column_id: str, posit
         }
 
 @mcp.tool()
-async def update_column_color(project_id: str, column_id: str, color: str) -> Dict[str, Any]:
+async def update_column_color(ctx: Context, project_id: str, column_id: str, color: str) -> Dict[str, Any]:
     """Update a column color.
-    
+
     Args:
         project_id: The project ID
         column_id: The column ID
         color: The hex color code (e.g., #FF0000)
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
     
     try:
         column = await _run_sync(client.update_column_color, project_id, column_id, color)
@@ -1707,16 +1707,16 @@ async def update_column_color(project_id: str, column_id: str, color: str) -> Di
         }
 
 @mcp.tool()
-async def put_column_on_hold(project_id: str, column_id: str) -> Dict[str, Any]:
+async def put_column_on_hold(ctx: Context, project_id: str, column_id: str) -> Dict[str, Any]:
     """Put a column on hold (freeze work).
-    
+
     Args:
         project_id: The project ID
         column_id: The column ID
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
     
     try:
         await _run_sync(client.put_column_on_hold, project_id, column_id)
@@ -1737,16 +1737,16 @@ async def put_column_on_hold(project_id: str, column_id: str) -> Dict[str, Any]:
         }
 
 @mcp.tool()
-async def remove_column_hold(project_id: str, column_id: str) -> Dict[str, Any]:
+async def remove_column_hold(ctx: Context, project_id: str, column_id: str) -> Dict[str, Any]:
     """Remove hold from a column (unfreeze work).
-    
+
     Args:
         project_id: The project ID
         column_id: The column ID
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
     
     try:
         await _run_sync(client.remove_column_hold, project_id, column_id)
@@ -1767,16 +1767,16 @@ async def remove_column_hold(project_id: str, column_id: str) -> Dict[str, Any]:
         }
 
 @mcp.tool()
-async def watch_column(project_id: str, column_id: str) -> Dict[str, Any]:
+async def watch_column(ctx: Context, project_id: str, column_id: str) -> Dict[str, Any]:
     """Subscribe to notifications for changes in a column.
-    
+
     Args:
         project_id: The project ID
         column_id: The column ID
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
     
     try:
         await _run_sync(client.watch_column, project_id, column_id)
@@ -1797,16 +1797,16 @@ async def watch_column(project_id: str, column_id: str) -> Dict[str, Any]:
         }
 
 @mcp.tool()
-async def unwatch_column(project_id: str, column_id: str) -> Dict[str, Any]:
+async def unwatch_column(ctx: Context, project_id: str, column_id: str) -> Dict[str, Any]:
     """Unsubscribe from notifications for a column.
-    
+
     Args:
         project_id: The project ID
         column_id: The column ID
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
     
     try:
         await _run_sync(client.unwatch_column, project_id, column_id)
@@ -1828,16 +1828,16 @@ async def unwatch_column(project_id: str, column_id: str) -> Dict[str, Any]:
 
 # More Card Management Tools  
 @mcp.tool()
-async def uncomplete_card(project_id: str, card_id: str) -> Dict[str, Any]:
+async def uncomplete_card(ctx: Context, project_id: str, card_id: str) -> Dict[str, Any]:
     """Mark a card as incomplete.
-    
+
     Args:
         project_id: The project ID
         card_id: The card ID
     """
-    client = _get_basecamp_client()
+    client = _get_basecamp_client(ctx)
     if not client:
-        return _get_auth_error_response()
+        return _get_auth_error_response(ctx)
     
     try:
         await _run_sync(client.uncomplete_card, project_id, card_id)
