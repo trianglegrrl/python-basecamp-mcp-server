@@ -1354,6 +1354,20 @@ class BasecampClient:
         else:
             raise Exception(f"Failed to trash document: {response.status_code} - {response.text}")
 
+    def trash_recording(self, project_id, recording_id):
+        """Generic recording trash — moves any BC3 recording type to the trash.
+
+        Uses the same PUT .../status/trashed.json endpoint as the type-specific
+        helpers. The live-test cleanup script uses this for all recording kinds
+        except Todo (which has its own delete_todo endpoint).
+        """
+        endpoint = f"buckets/{project_id}/recordings/{recording_id}/status/trashed.json"
+        response = self.put(endpoint)
+        if response.status_code == 204:
+            return True
+        else:
+            raise Exception(f"Failed to trash recording: {response.status_code} - {response.text}")
+
     # Upload methods
     def get_uploads(self, project_id, vault_id=None):
         """List uploads in a project or vault."""
