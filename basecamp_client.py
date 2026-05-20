@@ -309,8 +309,13 @@ class BasecampClient:
     def update_todo(self, project_id, todo_id, content=None, description=None, assignee_ids=None,
                     completion_subscriber_ids=None, notify=None, due_on=None, starts_on=None):
         """
-        Update an existing todo item.
-        
+        Update an existing todo item using a fetch-then-merge strategy.
+
+        BC3's PUT /todos/{id}.json replaces the full representation — omitting a
+        field clears its value.  This method fetches the current todo first and
+        overlays only the explicitly-provided kwargs, so unspecified fields are
+        preserved.
+
         Args:
             project_id (str): Project ID
             todo_id (str): Todo ID
@@ -321,31 +326,35 @@ class BasecampClient:
             notify (bool, optional): Whether to notify assignees
             due_on (str, optional): Due date in YYYY-MM-DD format
             starts_on (str, optional): Start date in YYYY-MM-DD format
-            
+
         Returns:
             dict: The updated todo
         """
-        endpoint = f'buckets/{project_id}/todos/{todo_id}.json'
-        data = {}
-        
-        if content is not None:
-            data['content'] = content
-        if description is not None:
-            data['description'] = description
-        if assignee_ids is not None:
-            data['assignee_ids'] = assignee_ids
-        if completion_subscriber_ids is not None:
-            data['completion_subscriber_ids'] = completion_subscriber_ids
+        # Fetch current state so unspecified fields are preserved (BC3 PUT replaces all).
+        current = self.get_todo(project_id, todo_id)
+
+        # Build merged payload: start from existing values, then overlay caller's args.
+        def _assignee_ids_from(todo):
+            return [a['id'] for a in todo.get('assignees', [])]
+
+        def _subscriber_ids_from(todo):
+            return [s['id'] for s in todo.get('completion_subscribers', [])]
+
+        data = {
+            'content': content if content is not None else current.get('content', ''),
+            'description': description if description is not None else current.get('description', ''),
+            'assignee_ids': assignee_ids if assignee_ids is not None else _assignee_ids_from(current),
+            'completion_subscriber_ids': (
+                completion_subscriber_ids if completion_subscriber_ids is not None
+                else _subscriber_ids_from(current)
+            ),
+            'due_on': due_on if due_on is not None else current.get('due_on'),
+            'starts_on': starts_on if starts_on is not None else current.get('starts_on'),
+        }
         if notify is not None:
             data['notify'] = notify
-        if due_on is not None:
-            data['due_on'] = due_on
-        if starts_on is not None:
-            data['starts_on'] = starts_on
 
-        if not data:
-            raise ValueError("No fields provided to update")
-            
+        endpoint = f'buckets/{project_id}/todos/{todo_id}.json'
         response = self.put(endpoint, data)
         if response.status_code == 200:
             return response.json()
@@ -415,18 +424,18 @@ class BasecampClient:
     def complete_todo(self, project_id, todo_id):
         """
         Mark a todo as complete.
-        
+
         Args:
             project_id (str): Project ID
             todo_id (str): Todo ID
-            
+
         Returns:
-            dict: Completion details
+            bool: True if successful
         """
         endpoint = f'buckets/{project_id}/todos/{todo_id}/completion.json'
         response = self.post(endpoint)
-        if response.status_code == 201:
-            return response.json()
+        if response.status_code == 204:
+            return True
         else:
             raise Exception(f"Failed to complete todo: {response.status_code} - {response.text}")
 
@@ -856,13 +865,13 @@ class BasecampClient:
             raise Exception(f"Failed to get schedule: {str(e)}")
 
     # Comments methods
-    def get_comments(self, project_id, recording_id, page=1):
+    def get_comments(self, recording_id, project_id, page=1):
         """
         Get comments for a recording (todos, message, etc.).
 
         Args:
+            recording_id (int): ID of the recording (todo, message, etc.)
             project_id (int): Project/bucket ID.
-            recording_id (int): ID of the recording (todos, message, etc.)
             page (int): Page number for pagination (default: 1).
                         Basecamp uses geared pagination: page 1 has 15 results,
                         page 2 has 30, page 3 has 50, page 4+ has 100.
@@ -1168,8 +1177,8 @@ class BasecampClient:
     def complete_card(self, project_id, card_id):
         """Mark a card as complete."""
         response = self.post(f'buckets/{project_id}/todos/{card_id}/completion.json')
-        if response.status_code == 201:
-            return response.json()
+        if response.status_code == 204:
+            return True
         else:
             raise Exception(f"Failed to complete card: {response.status_code} - {response.text}")
 
@@ -1233,17 +1242,23 @@ class BasecampClient:
 
     def complete_card_step(self, project_id, step_id):
         """Mark a card step as complete."""
-        response = self.post(f'buckets/{project_id}/todos/{step_id}/completion.json')
-        if response.status_code == 201:
+        response = self.put(
+            f'buckets/{project_id}/card_tables/steps/{step_id}/completions.json',
+            {'completion': 'on'},
+        )
+        if response.status_code == 200:
             return response.json()
         else:
             raise Exception(f"Failed to complete card step: {response.status_code} - {response.text}")
 
     def uncomplete_card_step(self, project_id, step_id):
         """Mark a card step as incomplete."""
-        response = self.delete(f'buckets/{project_id}/todos/{step_id}/completion.json')
-        if response.status_code == 204:
-            return True
+        response = self.put(
+            f'buckets/{project_id}/card_tables/steps/{step_id}/completions.json',
+            {'completion': 'off'},
+        )
+        if response.status_code == 200:
+            return response.json()
         else:
             raise Exception(f"Failed to uncomplete card step: {response.status_code} - {response.text}")
 

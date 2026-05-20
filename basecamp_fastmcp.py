@@ -700,7 +700,7 @@ async def get_comments(ctx: Context, recording_id: str, project_id: str, page: i
         return _get_auth_error_response(ctx)
 
     try:
-        result = await _run_sync(client.get_comments, project_id, recording_id, page)
+        result = await _run_sync(client.get_comments, recording_id, project_id, page)
         return {
             "status": "success",
             "comments": result["comments"],
