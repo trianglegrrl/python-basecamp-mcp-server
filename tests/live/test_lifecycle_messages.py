@@ -36,5 +36,6 @@ def test_create_comment_on_message(
     id_store(msg['id'], sandbox_project_id, 'Message::Post')
     cm = live_client.create_comment(msg['id'], sandbox_project_id, content='<p>reply</p>')
     id_store(cm['id'], sandbox_project_id, 'Comment')
-    comments = live_client.get_comments(msg['id'], sandbox_project_id)
-    assert any(c['id'] == cm['id'] for c in comments)
+    # get_comments returns {"comments": [...], "total_count", "next_page"}.
+    result = live_client.get_comments(msg['id'], sandbox_project_id)
+    assert any(c['id'] == cm['id'] for c in result['comments'])
