@@ -102,35 +102,27 @@ def test_get_basecamp_client_returns_none_when_provider_returns_none():
     assert _get_basecamp_client(ctx) is None
 
 
-def test_get_basecamp_client_no_args_legacy_path_still_works():
-    """Backward compat during migration: _get_basecamp_client() with no args
-    falls back to the file/env path. Removed in Chunk 4."""
+def test_legacy_no_args_path_removed():
+    """After Chunk 4 cleanup, _get_basecamp_client() with no ctx is a hard
+    error — the legacy fallback is gone, ctx is required."""
     from basecamp_fastmcp import _get_basecamp_client
-    with patch('basecamp_fastmcp.token_storage') as mock_storage, \
-         patch('basecamp_fastmcp.auth_manager') as mock_auth, \
-         patch('basecamp_fastmcp.os.environ', {'BASECAMP_ACCOUNT_ID': '42'}):
-        mock_storage.get_token.return_value = {
-            'access_token': 'tok_legacy',
-            'account_id': '42',
-        }
-        mock_auth.ensure_authenticated.return_value = True
-        client = _get_basecamp_client()  # no ctx — legacy entry point
-        assert client is not None
-        assert client.access_token == 'tok_legacy'
+
+    with pytest.raises(TypeError):
+        _get_basecamp_client()  # no ctx, no fallback
 
 
-def test_get_basecamp_client_legacy_path_resolves_account_id_from_env():
-    """Legacy no-args path: when the token omits account_id, it falls back to
-    the BASECAMP_ACCOUNT_ID env var (the `or os.getenv(...)` branch)."""
-    from basecamp_fastmcp import _get_basecamp_client
-    with patch('basecamp_fastmcp.token_storage') as mock_storage, \
-         patch('basecamp_fastmcp.auth_manager') as mock_auth, \
-         patch('basecamp_fastmcp.os.environ', {'BASECAMP_ACCOUNT_ID': '77'}):
-        mock_storage.get_token.return_value = {
-            'access_token': 'tok_legacy',
-            # account_id intentionally absent — env must supply it
-        }
-        mock_auth.ensure_authenticated.return_value = True
-        client = _get_basecamp_client()  # no ctx — legacy entry point
-        assert client is not None
-        assert client.account_id == '77'
+def test_no_legacy_marker_remains_in_source():
+    """No .py file in the repo retains the legacy no-args marker."""
+    import pathlib
+    # Build the marker at runtime so THIS test file's own source does not
+    # contain the contiguous literal (which would make the test match itself).
+    marker = 'LEGACY_NO_ARGS' + '_GET_CLIENT'
+    root = pathlib.Path(__file__).parent.parent
+    hits = []
+    for path in root.rglob('*.py'):
+        if 'venv' in path.parts or '__pycache__' in path.parts:
+            continue
+        text = path.read_text(encoding='utf-8', errors='ignore')
+        if marker in text:
+            hits.append(str(path.relative_to(root)))
+    assert hits == [], f"legacy no-args marker still present in: {hits}"
