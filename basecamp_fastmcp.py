@@ -2643,6 +2643,8 @@ if __name__ == "__main__":
     _transport_mode = args.transport
     logger.info("Starting Basecamp FastMCP server (transport=%s)", args.transport)
     if args.transport == "streamable-http":
-        mcp.run(transport="streamable-http", host=args.host, port=args.port)
+        mcp.settings.host = args.host
+        mcp.settings.port = args.port
+        mcp.run(transport="streamable-http")
     else:
         mcp.run(transport="stdio")
