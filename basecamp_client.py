@@ -11,7 +11,7 @@ class BasecampClient:
     """
 
     def __init__(self, username=None, password=None, account_id=None, user_agent=None,
-                 access_token=None, auth_mode="basic"):
+                 access_token=None, auth_mode="basic", base_url=None):
         """
         Initialize the Basecamp client with credentials.
 
@@ -60,8 +60,18 @@ class BasecampClient:
         else:
             raise ValueError("Invalid auth_mode. Must be 'basic' or 'oauth'")
 
-        # Basecamp 3 uses a different URL structure
-        self.base_url = f"https://3.basecampapi.com/{self.account_id}"
+        # Override order (highest precedence first):
+        #   1. explicit base_url kwarg (used by tests + direct integration)
+        #   2. BASECAMP_API_BASE_URL env var (used by the streamable-http upstream
+        #      to point at a fake-BC API in CI E2E tests)
+        #   3. production default
+        # An empty / unset BASECAMP_API_BASE_URL is treated as "not set": the
+        # `or`-chain falls through to (3). Set it to a real URL to redirect.
+        self.base_url = (
+            base_url
+            or os.environ.get('BASECAMP_API_BASE_URL')
+            or f"https://3.basecampapi.com/{self.account_id}"
+        )
 
     def test_connection(self):
         """Test the connection to Basecamp API."""
