@@ -46,6 +46,13 @@ def test_update_card_changes_title(live_client, sandbox_project_id, column_id, p
     assert fetched['title'] == f'{prefix} updated'
 
 
+@pytest.mark.xfail(
+    reason="BC3 card-table cards expose no working completion endpoint: the card "
+    "record's completion_url 404s on POST, the card-update PUT 400s on a "
+    "`completed` field, and no completion route is documented in the BC3 API "
+    "reference. complete_card/uncomplete_card cannot function — see "
+    "docs/operations/follow-ups.md (pn-ai-portal).",
+)
 def test_complete_then_uncomplete_card(live_client, sandbox_project_id, column_id, prefix, id_store):
     card = live_client.create_card(sandbox_project_id, column_id, title=f'{prefix} complete-test')
     id_store(card['id'], sandbox_project_id, 'CardTableCard')
