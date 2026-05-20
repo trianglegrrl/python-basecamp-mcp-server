@@ -12,7 +12,7 @@ import sys
 from typing import Any, Dict, List, Optional
 import anyio
 import httpx
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import Context, FastMCP
 
 # Import existing business logic
 from basecamp_client import BasecampClient
@@ -38,8 +38,72 @@ logging.basicConfig(
 )
 logger = logging.getLogger('basecamp_fastmcp')
 
+import argparse
+from contextlib import asynccontextmanager
+from typing import AsyncIterator
+
+from auth.provider import (
+    CredentialProvider,
+    FileCredentialProvider,
+    HeaderCredentialProvider,
+)
+
+# Transport is chosen at process start by the __main__ block and read once
+# by the lifespan startup callback. It is NOT per-request state — the lifespan
+# runs exactly once per server lifetime, after __main__ sets it.
+# Spike outcome branch-a (mcp SDK 1.27.1): the provider lives in the lifespan
+# context, reached by tools via ctx.request_context.lifespan_context["provider"].
+_transport_mode: str = "stdio"
+
+
+def make_lifespan(transport: str):
+    """Build the FastMCP lifespan for the given transport.
+
+    The returned asynccontextmanager yields a dict that FastMCP exposes as
+    ctx.request_context.lifespan_context. Tools read the provider via
+    lifespan_context["provider"]. One provider object per server lifetime.
+    """
+    @asynccontextmanager
+    async def _lifespan(_app: FastMCP) -> AsyncIterator[dict]:
+        provider: CredentialProvider = (
+            HeaderCredentialProvider()
+            if transport == "streamable-http"
+            else FileCredentialProvider()
+        )
+        logger.info("Lifespan startup: provider=%s", type(provider).__name__)
+        yield {"provider": provider}
+
+    return _lifespan
+
+
+@asynccontextmanager
+async def _module_lifespan(app: FastMCP) -> AsyncIterator[dict]:
+    """Lifespan bound onto `mcp` at construction. FastMCP has no post-construction
+    lifespan setter (mcp SDK 1.27.1), but the transport is only known in
+    __main__ — so this defers the choice by reading _transport_mode when the
+    `async with` body runs (startup), strictly after __main__ assigns it."""
+    async with make_lifespan(_transport_mode)(app) as ctx_dict:
+        yield ctx_dict
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    p = argparse.ArgumentParser(description="Basecamp 3 MCP server (FastMCP)")
+    p.add_argument(
+        '--transport',
+        choices=['stdio', 'streamable-http'],
+        default='stdio',
+        help='Transport mode. stdio (default) is the legacy single-user path; '
+             'streamable-http binds an HTTP server for hosted multi-user use.',
+    )
+    p.add_argument('--host', default='127.0.0.1',
+        help='Bind host for streamable-http transport. Ignored for stdio.')
+    p.add_argument('--port', type=int, default=8084,
+        help='Bind port for streamable-http transport. Ignored for stdio.')
+    return p.parse_args(argv)
+
+
 # Initialize FastMCP server
-mcp = FastMCP("basecamp")
+mcp = FastMCP("basecamp", lifespan=_module_lifespan)
 
 # Auth helper functions (reused from original server)
 def _get_basecamp_client() -> Optional[BasecampClient]:
@@ -2507,6 +2571,14 @@ async def reposition_todolist_group(
 # 🎉 COMPLETE FastMCP server with ALL tools migrated!
 
 if __name__ == "__main__":
-    logger.info("Starting Basecamp FastMCP server")
-    # Run using official MCP stdio transport
-    mcp.run(transport='stdio') 
+    args = parse_args()
+    # Module-scope assignment: rebinds the module-level _transport_mode (this
+    # block runs at module scope, not a function). _module_lifespan reads it at
+    # startup. If this block is ever extracted into a main() function, add
+    # `global _transport_mode` so the rebind still reaches the module global.
+    _transport_mode = args.transport
+    logger.info("Starting Basecamp FastMCP server (transport=%s)", args.transport)
+    if args.transport == "streamable-http":
+        mcp.run(transport="streamable-http", host=args.host, port=args.port)
+    else:
+        mcp.run(transport="stdio")
