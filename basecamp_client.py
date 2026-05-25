@@ -650,13 +650,95 @@ class BasecampClient:
             raise Exception(f"Failed to reposition todolist group: {response.status_code} - {response.text}")
 
     # People methods
-    def get_people(self):
-        """Get all people in the account."""
-        response = self.get('people.json')
+    def get_my_profile(self):
+        """Get the profile of the token-owning user.
+
+        BC3 endpoint: GET /my/profile.json. Returns a single Person object
+        identifying which user the current OAuth token belongs to — the
+        seed for assignment-by-person tools (see get_my_assignments).
+
+        Returns:
+            dict: The token owner's Person resource (id, name,
+                email_address, avatar_url, etc.).
+        """
+        response = self.get('my/profile.json')
         if response.status_code == 200:
             return response.json()
         else:
-            raise Exception(f"Failed to get people: {response.status_code} - {response.text}")
+            raise Exception(f"Failed to get profile: {response.status_code} - {response.text}")
+
+    def get_people(self):
+        """Get all people the authenticated user can see in the account,
+        handling pagination.
+
+        Basecamp paginates list endpoints (commonly 15 items per page). This
+        implementation follows pagination via the `page` query parameter and
+        the HTTP `Link` header if present, aggregating all pages before
+        returning the combined list. Prior to this it issued a single GET
+        and silently truncated at the first page.
+
+        Returns:
+            list: All people visible to the token owner across the account.
+        """
+        endpoint = 'people.json'
+
+        all_people = []
+        page = 1
+
+        while True:
+            response = self.get(endpoint, params={"page": page})
+            if response.status_code != 200:
+                raise Exception(f"Failed to get people: {response.status_code} - {response.text}")
+
+            page_items = response.json() or []
+            all_people.extend(page_items)
+
+            # Check for next page using Link header
+            link_header = response.headers.get("Link", "")
+            has_next = 'rel="next"' in link_header if link_header else False
+
+            if not page_items or not has_next:
+                break
+
+            page += 1
+
+        return all_people
+
+    def get_project_people(self, project_id):
+        """Get all people with access to a specific project, handling pagination.
+
+        BC3 endpoint: GET /projects/{project_id}/people.json. Paginated via
+        the same `page`+`Link` header pattern as get_people /
+        get_schedule_entries.
+
+        Args:
+            project_id: Project/bucket ID
+
+        Returns:
+            list: All people who have access to the project.
+        """
+        endpoint = f'projects/{project_id}/people.json'
+
+        all_people = []
+        page = 1
+
+        while True:
+            response = self.get(endpoint, params={"page": page})
+            if response.status_code != 200:
+                raise Exception(f"Failed to get project people: {response.status_code} - {response.text}")
+
+            page_items = response.json() or []
+            all_people.extend(page_items)
+
+            link_header = response.headers.get("Link", "")
+            has_next = 'rel="next"' in link_header if link_header else False
+
+            if not page_items or not has_next:
+                break
+
+            page += 1
+
+        return all_people
 
     # Campfire (chat) methods
     def get_campfires(self, project_id):
