@@ -194,7 +194,19 @@ async def _run_sync(func, *args, **kwargs):
 
 @mcp.tool()
 async def get_projects(ctx: Context) -> Dict[str, Any]:
-    """Get all Basecamp projects."""
+    """List every Basecamp project in the account.
+
+    Account-wide discovery tool: takes no arguments and returns the full
+    project dock (id, name, description, purpose) for every project the
+    authenticated user can see. This is the entry point for any workflow
+    that asks "what projects do we have", "show me all projects",
+    "enumerate the account", or needs a project_id to feed downstream
+    calls.
+
+    Distinct from `get_project`, which takes a single `project_id` and
+    returns one project's internal dock (todoset id, message board id,
+    card table id, etc.).
+    """
     client = _get_basecamp_client(ctx)
     if not client:
         return _get_auth_error_response(ctx)
@@ -459,10 +471,17 @@ async def search_basecamp(ctx: Context, query: str, project_id: Optional[str] = 
 
 @mcp.tool()
 async def get_todolists(ctx: Context, project_id: str) -> Dict[str, Any]:
-    """Get todo lists for a project.
+    """List every to-do list inside a project's todoset.
+
+    Project-scoped enumeration: pass a `project_id` and get back the full
+    collection of todolists (name, id, completed_ratio, todo counts) for
+    that project. This is the discovery step before drilling into a
+    specific list with `get_todolist` or pulling its items with
+    `get_todos`. Use it for "show me all the lists in this project",
+    "what todolists exist here", or "enumerate the todoset".
 
     Args:
-        project_id: The project ID
+        project_id: The project ID (numeric, from `get_projects`).
     """
     client = _get_basecamp_client(ctx)
     if not client:
