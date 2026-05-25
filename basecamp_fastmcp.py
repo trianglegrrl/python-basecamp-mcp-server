@@ -921,6 +921,47 @@ async def create_comment(ctx: Context, recording_id: str, project_id: str, conte
         }
 
 @mcp.tool()
+async def update_comment(ctx: Context, project_id: str, comment_id: str, content: str) -> Dict[str, Any]:
+    """Update a comment's content (partial PUT — only `content` is patched).
+
+    Unlike update_message / update_todo / update_project which use a
+    fetch-then-merge whitelist, BC3 accepts a single-field PUT on comments,
+    so no GET is required.
+
+    Args:
+        project_id: Project / bucket id
+        comment_id: The comment id
+        content: New content (HTML; wrap rich text in <div>...</div>)
+    """
+    client = _get_basecamp_client(ctx)
+    if not client:
+        return _get_auth_error_response(ctx)
+
+    try:
+        # Pre-existing client method signature is (comment_id, bucket_id, content)
+        # — unconventional vs the rest of the client surface. Bridge here so the
+        # tool surface stays consistent (project_id first, then resource id).
+        comment = await _run_sync(
+            lambda: client.update_comment(comment_id, project_id, content)
+        )
+        return {
+            "status": "success",
+            "comment": comment,
+            "message": f"Updated comment {comment_id}",
+        }
+    except Exception as e:
+        logger.error(f"Error updating comment {comment_id}: {e}")
+        if "401" in str(e) and "expired" in str(e).lower():
+            return {
+                "error": "OAuth token expired",
+                "message": "Your Basecamp OAuth token expired during the API call. Please re-authenticate by visiting http://localhost:8000 and completing the OAuth flow again."
+            }
+        return {
+            "error": "Execution error",
+            "message": str(e)
+        }
+
+@mcp.tool()
 async def get_campfire_lines(ctx: Context, project_id: str, campfire_id: str) -> Dict[str, Any]:
     """Get recent messages from a Basecamp campfire (chat room).
 
@@ -1105,6 +1146,63 @@ async def create_message(ctx: Context, project_id: str, subject: str, content: s
         }
     except Exception as e:
         logger.error(f"Error creating message: {e}")
+        if "401" in str(e) and "expired" in str(e).lower():
+            return {
+                "error": "OAuth token expired",
+                "message": "Your Basecamp OAuth token expired during the API call. Please re-authenticate by visiting http://localhost:8000 and completing the OAuth flow again."
+            }
+        return {
+            "error": "Execution error",
+            "message": str(e)
+        }
+
+
+@mcp.tool()
+async def update_message(
+    ctx: Context, project_id: str, message_id: str,
+    subject: Optional[str] = None,
+    content: Optional[str] = None,
+    category_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Update an existing message (fetch-then-merge; BC3 requires `subject`).
+
+    BC3's PUT /buckets/{p}/messages/{id}.json replaces the full representation
+    and rejects payloads missing `subject`, so the client GETs the current
+    message and supplies the current value for every whitelisted field the
+    patch omits. Only the whitelisted fields (subject, content, category_id)
+    are forwarded.
+
+    Note:
+        None / omitted = "leave current value". This tool cannot CLEAR a field
+        back to empty — that requires the BC3 UI. Same limitation as
+        update_todo / update_project / update_schedule_entry.
+
+    Args:
+        project_id: Project / bucket id
+        message_id: Message id
+        subject: New subject; preserved from current if None
+        content: New HTML content; preserved if None
+        category_id: Message category id; preserved if None
+    """
+    client = _get_basecamp_client(ctx)
+    if not client:
+        return _get_auth_error_response(ctx)
+
+    try:
+        message = await _run_sync(lambda: client.update_message(
+            project_id, message_id,
+            subject=subject, content=content, category_id=category_id,
+        ))
+        return {
+            "status": "success",
+            # Match create_message's envelope: "message" is the resource,
+            # "result" is the success string. Keeps the create_*/update_*
+            # message tools speaking the same shape.
+            "message": message,
+            "result": f"Updated message {message_id}",
+        }
+    except Exception as e:
+        logger.error(f"Error updating message {message_id}: {e}")
         if "401" in str(e) and "expired" in str(e).lower():
             return {
                 "error": "OAuth token expired",

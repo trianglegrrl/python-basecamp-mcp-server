@@ -1,9 +1,41 @@
 # Basecamp MCP Integration
 
+> Fork of [georgeantonopoulos/Basecamp-MCP-Server](https://github.com/georgeantonopoulos/Basecamp-MCP-Server)
+> maintained by [trianglegrrl](https://github.com/trianglegrrl). Adds a
+> streamable-http transport for hosting, per-request bearer credentials,
+> 18 additional Basecamp 3 tools (assignment-by-person, project setup,
+> schedule, etc.), pagination on every list endpoint, and a live-test
+> sandbox suite.
+
 This project provides a **FastMCP-powered** integration for Basecamp 3, allowing AI clients to interact with Basecamp directly through the MCP protocol.
 
-✅ **Migration Complete:** Successfully migrated to official Anthropic FastMCP framework with **100% feature parity** (all 75 tools)
+✅ **Migration Complete:** Successfully migrated to the official Anthropic FastMCP framework with **100% feature parity** with the upstream (75 tools at the migration milestone; expanded to **93 tools** in this fork's v1.1 surface).
 🚀 **Ready for Production:** Full protocol compliance with MCP 2025-06-18
+
+## What this fork adds (over the upstream)
+
+| Area | Change |
+|---|---|
+| **Transport** | `--transport streamable-http` for hosting behind an HTTP proxy (per-request bearer auth). Upstream is stdio-only. |
+| **Credentials** | `CredentialProvider` abstraction with `FileCredentialProvider` (stdio: reads `oauth_tokens.json`) and `HeaderCredentialProvider` (HTTP: reads `Authorization: Bearer …` + `X-Basecamp-Account-Id` per request). Hosting proxy handles OAuth refresh. |
+| **Tool surface** | **75 → 93 tools (+18)** across 5 areas — see "v1.1 new tools" below. |
+| **Pagination** | `Link`-header pagination on every list endpoint. Fixed `get_people` and `get_schedule_entries`, which previously silently truncated at 15 entries. |
+| **`get_schedule` correctness** | The pre-existing `get_schedule` / `get_schedule_entries` client methods called BC3 endpoints that don't exist (`projects/{id}/schedule.json` and `buckets/{id}/schedules.json`); rewritten to use the correct dock-discovery + `/buckets/{p}/schedules/{id}/entries.json` shape. |
+| **Live tests** | `tests/live/` sandbox suite gated by `pytest.mark.live` + `BASECAMP_TEST_REFRESH_TOKEN`. `make test-live`, `make test-live-cleanup` sweeper, GitHub Actions `workflow_dispatch` job. |
+| **Token storage** | `BASECAMP_MCP_TOKEN_FILE` env-var override for ephemeral / containerized deploys (details in [Token Storage Location](#token-storage-location)). |
+| **Tool signature** | Every `@mcp.tool()` now takes `ctx: Context` as its first parameter and resolves credentials via the active provider — no module-level singleton state (details in [Tool signature (post v1.1)](#tool-signature-post-v11)). |
+
+## v1.1 new tools (the 18-tool port)
+
+| Batch | Tools | Headline use case |
+|---|---|---|
+| **Project setup** | `create_project`, `update_project`, `trash_project`, `update_project_access` | "Spin up a new project for X with these tasks" |
+| **Schedule** | `get_schedule`, `get_schedule_entries`, `get_schedule_entry`, `create_schedule_entry`, `update_schedule_entry` | Calendar event read + write (fetch-then-merge updates) |
+| **People / profile** | `get_my_profile`, `get_people`, `get_project_people` | "Who's on this project?" / token-owner identification |
+| **Assignment-by-person** | `get_my_assignments`, `get_my_due_assignments`, `get_my_completed_assignments`, `get_assignments_for_person` | "Show me Jill's tasks due this week" (the weekly-report workflow) |
+| **Comment / message edit** | `update_comment`, `update_message` | Edit-after-publish workflow |
+
+Date-scope vocabulary for `get_my_due_assignments` / `get_assignments_for_person`: `overdue`, `due_today`, `due_tomorrow`, `due_later_this_week`, `due_next_week`, `due_later` (Mon-start ISO weeks; disjoint). Full per-tool reference further down in [Available MCP Tools](#available-mcp-tools); the OAuth setup, per-client configuration, and troubleshooting from the upstream are preserved below.
 
 ## Quick Setup
 
@@ -73,7 +105,7 @@ This server works with **Cursor**, **Codex**, and **Claude Desktop**. Choose you
 6. **Verify in Cursor:**
    - Go to Cursor Settings → MCP
    - You should see "basecamp" with a **green checkmark**
-   - Available tools: **75 tools** for complete Basecamp control
+   - Available tools: **93 tools** for complete Basecamp control
 
 ### Test Your Setup
 
@@ -172,7 +204,7 @@ Based on the [official MCP quickstart guide](https://modelcontextprotocol.io/qui
 
 4. **Verify in Claude Desktop:**
    - Look for the "Search and tools" icon (🔍) in the chat interface
-   - You should see "basecamp" listed with all 75 tools available
+   - You should see "basecamp" listed with all 93 tools available
    - Toggle the tools on to enable Basecamp integration
 
 ### Claude Desktop Configuration
@@ -235,6 +267,10 @@ Once configured, you can use these tools in Cursor:
 
 - `get_projects` - Get all Basecamp projects
 - `get_project` - Get details for a specific project
+- `create_project` - Create a new project (v1.1; free-plan accounts return 507)
+- `update_project` - Update a project's name, description, admissions, or schedule_attributes (v1.1; fetch-then-merge — BC3 requires `name` even on partial updates; `None` means "preserve", cannot clear a field via this tool)
+- `trash_project` - Soft-delete a project (v1.1; recoverable from BC3 UI for 30 days; warn the user before calling — blast radius is every project member)
+- `update_project_access` - Grant/revoke project access by numeric person id, or create-and-grant by email (v1.1; **prerequisite** for assigning anyone to anything in a new project — BC3 silently no-ops assignments to non-members; numeric ids only — strings dropped)
 - `get_todolists` - Get todo lists for a project
 - `get_todolist` - Get a specific todo list by ID
 - `create_todolist` - Create a new todo list in a project
@@ -253,12 +289,14 @@ Once configured, you can use these tools in Cursor:
 - `global_search` - Search projects, todos, and campfire messages across all projects
 - `get_comments` - Get comments for a Basecamp item
 - `create_comment` - Create a comment on a Basecamp item
+- `update_comment` - Edit a comment's HTML content (v1.1; partial PUT — single-field on `content`, no fetch-then-merge needed for comments)
 - `get_campfire_lines` - Get recent messages from a Basecamp campfire
 - `get_message_board` - Get the message board for a project
 - `get_messages` - Get all messages from a project's message board
 - `get_message` - Get a specific message by ID
 - `get_message_categories` - Get available message categories (types) for a project (e.g. Announcement, FYI, Heartbeat, Pitch, Question)
 - `create_message` - Create a new message on a project's message board, with optional category
+- `update_message` - Edit a message's subject, content, or category_id (v1.1; fetch-then-merge — BC3 requires `subject` on PUT; `None` means "preserve", cannot clear a field via this tool)
 - `get_daily_check_ins` - Get project's daily check-in questions
 - `get_question_answers` - Get answers to daily check-in questions
 - `create_attachment` - Upload a file as an attachment
@@ -318,6 +356,40 @@ Once configured, you can use these tools in Cursor:
 - `complete_card_step` - Mark a card step as complete
 - `uncomplete_card_step` - Mark a card step as incomplete
 
+### People + Profile Tools (v1.1)
+
+- `get_my_profile` - Get the authenticated user's Person record (the OAuth token owner) — useful to confirm "the me in /my/* endpoints is who I think it is"
+- `get_people` - List every person the authenticated user can see in the account (paginated via `Link` header)
+- `get_project_people` - List every person with access to a specific project (paginated)
+
+### Assignment-by-Person Tools (v1.1) — the weekly-report workflow
+
+- `get_my_assignments` - Get the token owner's assignments (`{priorities, non_priorities}`)
+- `get_my_due_assignments` - Get the token owner's assignments with a `due_on` date, optionally filtered by `scope`. BC3 handles scope server-side; the client validates scope before the HTTP call.
+- `get_my_completed_assignments` - Get the token owner's completed assignments
+- `get_assignments_for_person` - Find todos assigned to a specific person, by `person_name` (case-insensitive substring) or `person_id`, optionally filtered by `scope` and `bucket` (project id). Multi-step walk: resolves person via `get_people()` → falls back to scanning recording assignees → walks `/projects/recordings.json?type=Todo` (paginated, ~5-15s typical) → client-side filter by assignee → optional date-scope filter.
+
+**Date-scope vocabulary** (for `get_my_due_assignments` and `get_assignments_for_person`):
+
+| scope | matches `due_on` ... |
+|---|---|
+| `overdue` | before today |
+| `due_today` | today |
+| `due_tomorrow` | today + 1 |
+| `due_later_this_week` | strictly after tomorrow, through Sunday of this week |
+| `due_next_week` | Monday through Sunday of next week |
+| `due_later` | strictly after next Sunday |
+
+Mon-start ISO weeks. Scopes are disjoint. On a Sunday, `due_later_this_week` matches nothing — "this week" already ends today.
+
+### Schedule (Calendar) Tools (v1.1)
+
+- `get_schedule` - Get the project's schedule resource (dock-discovered)
+- `get_schedule_entries` - Get all entries for a project's schedule (paginated)
+- `get_schedule_entry` - Get a single entry by id
+- `create_schedule_entry` - Create a schedule entry (`summary`, `starts_at`, `ends_at`, optional `description`, `participant_ids`, `all_day`, `notify`)
+- `update_schedule_entry` - Update an entry (fetch-then-merge whitelist `[summary, description, starts_at, ends_at, participant_ids, all_day, notify]`; `None` means "preserve")
+
 ### Example Cursor Usage
 
 Ask Cursor things like:
@@ -345,7 +417,7 @@ Ask Cursor things like:
 
 The project uses the **official Anthropic FastMCP framework** for maximum reliability and compatibility:
 
-1. **FastMCP Server** (`basecamp_fastmcp.py`) - Official MCP SDK with 75 tools, compatible with Cursor, Codex, and Claude Desktop
+1. **FastMCP Server** (`basecamp_fastmcp.py`) - Official MCP SDK with 93 tools, compatible with Cursor, Codex, Claude Desktop (stdio) and any MCP-aware HTTP proxy (streamable-http)
 2. **OAuth App** (`oauth_app.py`) - Handles OAuth 2.0 flow with Basecamp  
 3. **Token Storage** (`token_storage.py`) - Securely stores OAuth tokens
 4. **Basecamp Client** (`basecamp_client.py`) - Basecamp API client library
