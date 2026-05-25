@@ -1442,6 +1442,194 @@ async def get_project_people(ctx: Context, project_id: str) -> Dict[str, Any]:
         }
 
 
+# Assignment-by-person Tools (the L2 weekly-report surface)
+# Ports get_my_assignments / get_my_due_assignments / get_my_completed_assignments
+# / get_assignments_for_person from the deprecated Node MCP repo.
+@mcp.tool()
+async def get_my_assignments(ctx: Context) -> Dict[str, Any]:
+    """Get the token owner's assignments, grouped into priorities and non-priorities.
+
+    Hits BC3's GET /my/assignments.json. Returns the raw
+    {priorities: [...], non_priorities: [...]} shape under the
+    `assignments` key plus a flat total count.
+    """
+    client = _get_basecamp_client(ctx)
+    if not client:
+        return _get_auth_error_response(ctx)
+
+    try:
+        assignments = await _run_sync(client.get_my_assignments)
+        priorities = assignments.get('priorities') or []
+        non_priorities = assignments.get('non_priorities') or []
+        total = len(priorities) + len(non_priorities)
+        return {
+            "status": "success",
+            "assignments": assignments,
+            "count": total,
+            "message": (
+                f"Retrieved {len(priorities)} priority + "
+                f"{len(non_priorities)} non-priority assignments"
+            ),
+        }
+    except Exception as e:
+        logger.error(f"Error getting my assignments: {e}")
+        if "401" in str(e) and "expired" in str(e).lower():
+            return {
+                "error": "OAuth token expired",
+                "message": "Your Basecamp OAuth token expired during the API call. Please re-authenticate by visiting http://localhost:8000 and completing the OAuth flow again."
+            }
+        return {
+            "error": "Execution error",
+            "message": str(e)
+        }
+
+
+@mcp.tool()
+async def get_my_due_assignments(
+    ctx: Context, scope: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Get the token owner's assignments with a due date, optionally filtered by scope.
+
+    BC3 endpoint: GET /my/assignments/due.json[?scope=...]. Scope is filtered
+    server-side by BC3, but the client-side guard catches invalid scope
+    values BEFORE the HTTP call and surfaces the full enum in the error
+    message.
+
+    Args:
+        scope: One of 'overdue', 'due_today', 'due_tomorrow',
+            'due_later_this_week', 'due_next_week', 'due_later'. Optional.
+    """
+    client = _get_basecamp_client(ctx)
+    if not client:
+        return _get_auth_error_response(ctx)
+
+    try:
+        assignments = await _run_sync(lambda: client.get_my_due_assignments(scope))
+        count = len(assignments) if assignments else 0
+        scope_note = f" (scope={scope})" if scope else ""
+        return {
+            "status": "success",
+            "assignments": assignments,
+            "count": count,
+            "message": f"Retrieved {count} due assignments{scope_note}",
+        }
+    except Exception as e:
+        logger.error(f"Error getting my due assignments: {e}")
+        if "401" in str(e) and "expired" in str(e).lower():
+            return {
+                "error": "OAuth token expired",
+                "message": "Your Basecamp OAuth token expired during the API call. Please re-authenticate by visiting http://localhost:8000 and completing the OAuth flow again."
+            }
+        return {
+            "error": "Execution error",
+            "message": str(e)
+        }
+
+
+@mcp.tool()
+async def get_my_completed_assignments(ctx: Context) -> Dict[str, Any]:
+    """Get the token owner's completed assignments.
+
+    BC3 endpoint: GET /my/assignments/completed.json. Single GET, no
+    pagination (per the Node reference — BC3 caps the response).
+    """
+    client = _get_basecamp_client(ctx)
+    if not client:
+        return _get_auth_error_response(ctx)
+
+    try:
+        assignments = await _run_sync(client.get_my_completed_assignments)
+        count = len(assignments) if assignments else 0
+        return {
+            "status": "success",
+            "assignments": assignments,
+            "count": count,
+            "message": f"Retrieved {count} completed assignments",
+        }
+    except Exception as e:
+        logger.error(f"Error getting my completed assignments: {e}")
+        if "401" in str(e) and "expired" in str(e).lower():
+            return {
+                "error": "OAuth token expired",
+                "message": "Your Basecamp OAuth token expired during the API call. Please re-authenticate by visiting http://localhost:8000 and completing the OAuth flow again."
+            }
+        return {
+            "error": "Execution error",
+            "message": str(e)
+        }
+
+
+@mcp.tool()
+async def get_assignments_for_person(
+    ctx: Context,
+    person_name: Optional[str] = None,
+    person_id: Optional[Any] = None,
+    scope: Optional[str] = None,
+    bucket: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Find todos assigned to a specific person, optionally filtered by date scope.
+
+    The headline tool for the "show me Jill's tasks due this week" /
+    L2-weekly-report workflow. SLOW: walks /projects/recordings.json (typically
+    5-15s on real accounts) because BC3 has no direct
+    "todos-assigned-to-person-X" endpoint.
+
+    Resolution order: person_id wins over person_name. When only person_name
+    is given, the client first tries /people.json (case-insensitive substring
+    match on Person.name), then falls back to scanning recording assignees
+    (handles the case where the user isn't in the token owner's company
+    /people.json but is assigned to shared work).
+
+    Args:
+        person_name: Substring match on Person.name (case-insensitive).
+        person_id:   Numeric or string person id. Skips name lookup.
+        scope:       One of 'overdue', 'due_today', 'due_tomorrow',
+                     'due_later_this_week', 'due_next_week', 'due_later'.
+                     Optional. Date arithmetic uses today's local date.
+        bucket:      Project id to constrain the walk to. Optional.
+
+    At least one of person_name OR person_id is required.
+    """
+    client = _get_basecamp_client(ctx)
+    if not client:
+        return _get_auth_error_response(ctx)
+
+    try:
+        # _run_sync wraps anyio.to_thread.run_sync which doesn't accept kwargs;
+        # bind them via lambda so the off-thread call gets the right arguments.
+        result = await _run_sync(
+            lambda: client.get_assignments_for_person(
+                person_name=person_name,
+                person_id=person_id,
+                scope=scope,
+                bucket=bucket,
+            )
+        )
+        assignments = result.get('assignments') or []
+        resolved_id = result.get('person_id')
+        count = len(assignments)
+        who = person_name or f"id={resolved_id or person_id}"
+        scope_note = f" (scope={scope})" if scope else ""
+        return {
+            "status": "success",
+            "assignments": assignments,
+            "count": count,
+            "person_id": resolved_id,
+            "message": f"Retrieved {count} assignments for person {who}{scope_note}",
+        }
+    except Exception as e:
+        logger.error(f"Error getting assignments for person: {e}")
+        if "401" in str(e) and "expired" in str(e).lower():
+            return {
+                "error": "OAuth token expired",
+                "message": "Your Basecamp OAuth token expired during the API call. Please re-authenticate by visiting http://localhost:8000 and completing the OAuth flow again."
+            }
+        return {
+            "error": "Execution error",
+            "message": str(e)
+        }
+
+
 # Inbox Tools (Email Forwards)
 @mcp.tool()
 async def get_inbox(ctx: Context, project_id: str) -> Dict[str, Any]:

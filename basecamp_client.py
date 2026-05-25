@@ -1,8 +1,93 @@
 import os
 import re
+from datetime import date, timedelta
 
 import requests
 from dotenv import load_dotenv
+
+
+# Valid scope values for /my/assignments/due.json and the
+# get_assignments_for_person date filter. Order matches the deprecated Node
+# reference (src/lib/basecamp-client.ts). This tuple is the public scope
+# enum — surfaced in tool wrapper error messages and validated client-side
+# before any HTTP request.
+VALID_ASSIGNMENT_SCOPES = (
+    'overdue',
+    'due_today',
+    'due_tomorrow',
+    'due_later_this_week',
+    'due_next_week',
+    'due_later',
+)
+
+
+def _add_days(iso: str, days: int) -> str:
+    """Add `days` (may be negative) to an ISO date string (YYYY-MM-DD).
+
+    Returns the result as an ISO date string. Uses stdlib date arithmetic so
+    month and year boundaries are handled correctly (the Node ref relied on
+    Date setUTCDate(); this is the Python equivalent).
+    """
+    d = date.fromisoformat(iso)
+    return (d + timedelta(days=days)).isoformat()
+
+
+def _week_start(iso: str) -> str:
+    """Return the ISO date of the Monday of the week containing `iso`.
+
+    Mon-start ISO weeks. Python's date.weekday() returns 0 for Monday and 6
+    for Sunday, so offset_to_mon = -weekday(). When `iso` is already a
+    Monday, weekday() is 0 and the function returns `iso` itself.
+    """
+    d = date.fromisoformat(iso)
+    offset_to_mon = -d.weekday()
+    return _add_days(iso, offset_to_mon)
+
+
+def _matches_scope(due_on, scope: str, today: str) -> bool:
+    """Whether `due_on` falls inside `scope`'s date window relative to `today`.
+
+    The 6 scopes mirror BC3's /my/assignments/due.json?scope= vocabulary plus
+    one synthetic `due_later`. Date comparisons are lexicographic on
+    YYYY-MM-DD strings — safe because that format is monotonic.
+
+    Ported verbatim from src/lib/basecamp-client.ts (matchesScope) in the
+    deprecated Node MCP repo. See tests/test_matches_scope.py for the
+    boundary cases (today-is-Sunday, today-is-Monday, None due_on,
+    unknown scope, month rollover).
+
+    Args:
+        due_on: ISO date string (YYYY-MM-DD) or None/empty. A None /
+            empty due_on never matches any scope (returns False).
+        scope: One of VALID_ASSIGNMENT_SCOPES. Unknown scope returns False
+            defensively — the caller is expected to validate up front.
+        today: ISO date string for "now". Pass explicitly so tests don't
+            depend on the clock.
+
+    Returns:
+        bool: True iff due_on lies in the scope's window.
+    """
+    if not due_on:
+        return False
+    tomorrow = _add_days(today, 1)
+    this_mon = _week_start(today)
+    this_sun = _add_days(this_mon, 6)
+    next_mon = _add_days(this_mon, 7)
+    next_sun = _add_days(next_mon, 6)
+
+    if scope == 'overdue':
+        return due_on < today
+    if scope == 'due_today':
+        return due_on == today
+    if scope == 'due_tomorrow':
+        return due_on == tomorrow
+    if scope == 'due_later_this_week':
+        return due_on > tomorrow and due_on <= this_sun
+    if scope == 'due_next_week':
+        return due_on >= next_mon and due_on <= next_sun
+    if scope == 'due_later':
+        return due_on > next_sun
+    return False
 
 
 class BasecampClient:
@@ -739,6 +824,229 @@ class BasecampClient:
             page += 1
 
         return all_people
+
+    # Assignment-by-person methods (the L2 weekly-report surface).
+    # Ports findAssignmentsForPerson / getMyAssignments / getMyDueAssignments
+    # / getMyCompletedAssignments / getRecordingsTodos from the deprecated
+    # Node MCP repo (src/lib/basecamp-client.ts). The module-level
+    # _matches_scope helper + VALID_ASSIGNMENT_SCOPES at the top of the file
+    # implement the 6-scope date filter the walk uses.
+    def get_my_assignments(self):
+        """Get the token owner's assignments grouped into priorities and
+        non-priorities.
+
+        BC3 endpoint: GET /my/assignments.json. Returns a single object
+        {priorities: [...], non_priorities: [...]} per the BC3 docs — NOT a
+        list. Single GET, no pagination.
+
+        Returns:
+            dict: {'priorities': [...], 'non_priorities': [...]}
+        """
+        response = self.get('my/assignments.json')
+        if response.status_code == 200:
+            return response.json()
+        else:
+            raise Exception(
+                f"Failed to get assignments: {response.status_code} - {response.text}"
+            )
+
+    def get_my_due_assignments(self, scope=None):
+        """Get the token owner's assignments with a due date, optionally
+        filtered server-side by scope.
+
+        BC3 endpoint: GET /my/assignments/due.json[?scope=...]. The scope
+        filter is applied by BC3 itself (one of VALID_ASSIGNMENT_SCOPES).
+        Single GET, no pagination.
+
+        Args:
+            scope: One of VALID_ASSIGNMENT_SCOPES, or None to skip filtering.
+                Validated client-side before any HTTP — invalid scope raises
+                ValueError with the full enum in the message.
+
+        Returns:
+            list: assignment dicts.
+        """
+        if scope is not None and scope not in VALID_ASSIGNMENT_SCOPES:
+            raise ValueError(
+                f"Invalid scope '{scope}'. Valid options: "
+                f"{', '.join(VALID_ASSIGNMENT_SCOPES)}"
+            )
+        params = {}
+        if scope:
+            params['scope'] = scope
+        response = self.get('my/assignments/due.json', params=params)
+        if response.status_code == 200:
+            return response.json()
+        else:
+            raise Exception(
+                f"Failed to get due assignments: {response.status_code} - {response.text}"
+            )
+
+    def get_my_completed_assignments(self):
+        """Get the token owner's completed assignments.
+
+        BC3 endpoint: GET /my/assignments/completed.json. Single GET, no
+        pagination per the Node reference (BC3 caps the response).
+
+        Returns:
+            list: completed assignment dicts.
+        """
+        response = self.get('my/assignments/completed.json')
+        if response.status_code == 200:
+            return response.json()
+        else:
+            raise Exception(
+                f"Failed to get completed assignments: "
+                f"{response.status_code} - {response.text}"
+            )
+
+    def get_recordings_todos(self, bucket=None, status=None):
+        """Walk /projects/recordings.json?type=Todo across all pages.
+
+        Used by get_assignments_for_person to scan every visible todo in the
+        account (or a single bucket) so it can client-side filter by
+        assignee. Slow — typically 5-15s on real accounts; that's BC3's
+        only pivot to "all todos visible to me" since /my/* is owner-only.
+
+        Args:
+            bucket: Project id to constrain the walk to. Optional.
+            status: 'active' | 'archived' | 'trashed'. Optional.
+
+        Returns:
+            list: todo recording dicts.
+        """
+        params = {'type': 'Todo'}
+        if bucket:
+            params['bucket'] = bucket
+        if status:
+            params['status'] = status
+
+        all_todos = []
+        page = 1
+        while True:
+            page_params = {**params, 'page': page}
+            response = self.get('projects/recordings.json', params=page_params)
+            if response.status_code != 200:
+                raise Exception(
+                    f"Failed to get recordings: "
+                    f"{response.status_code} - {response.text}"
+                )
+
+            page_items = response.json() or []
+            all_todos.extend(page_items)
+
+            link_header = response.headers.get("Link", "")
+            has_next = 'rel="next"' in link_header if link_header else False
+
+            if not page_items or not has_next:
+                break
+
+            page += 1
+
+        return all_todos
+
+    def get_assignments_for_person(
+        self, person_name=None, person_id=None, scope=None,
+        bucket=None, today=None,
+    ):
+        """Find todos assigned to a specific person.
+
+        Multi-step walk (BC3 has no direct endpoint for "todos assigned to
+        person X"):
+          1. Validate scope against VALID_ASSIGNMENT_SCOPES.
+          2. Resolve person_id from person_name via /people.json
+             (case-insensitive substring match on `name`).
+          3. Walk /projects/recordings.json?type=Todo (paginated).
+          4. Fall back to scanning recording assignees if /people.json
+             didn't contain the person — handles the "current user can't
+             see them in the account list but they're assigned to a shared
+             project" case (see deprecated-SKILL.md pitfall).
+          5. Client-side filter by assignee id (string-compared for safety).
+          6. Apply scope date filter via _matches_scope if scope given.
+
+        Args:
+            person_name: Substring to match on Person.name (case-insensitive).
+            person_id:   Numeric or string person id. Skips name lookup.
+            scope:       One of VALID_ASSIGNMENT_SCOPES, or None.
+            bucket:      Project id to constrain the walk.
+            today:       ISO date string for the scope filter. Defaults to
+                         date.today().isoformat(). Pass explicitly for tests.
+
+        Raises:
+            ValueError: invalid scope, no name/id supplied, or name not
+                resolvable to a known person.
+
+        Returns:
+            dict: {
+                'person_id': <resolved id, str or int as BC3 returned it>,
+                'assignments': list of matching todo recording dicts,
+            }
+            Returning a dict (not just the list) lets the tool wrapper
+            surface which person_id was resolved when the caller only gave
+            a name, so the model can use that id in subsequent calls
+            without re-running the slow recordings walk.
+        """
+        if scope is not None and scope not in VALID_ASSIGNMENT_SCOPES:
+            raise ValueError(
+                f"Invalid scope '{scope}'. Valid options: "
+                f"{', '.join(VALID_ASSIGNMENT_SCOPES)}"
+            )
+
+        needle = person_name.lower() if person_name else None
+        resolved_id = person_id
+
+        # Step 1: try /people.json (cheap; ~one paginated walk).
+        if not resolved_id and needle:
+            people = self.get_people()
+            match = next(
+                (p for p in people if needle in (p.get('name') or '').lower()),
+                None,
+            )
+            if match:
+                resolved_id = match['id']
+
+        if not resolved_id and not needle:
+            raise ValueError(
+                'get_assignments_for_person requires either person_name or person_id'
+            )
+
+        # Step 2: walk recordings (slow; cached upstream of this call by the
+        # caller if needed).
+        todos = self.get_recordings_todos(bucket=bucket)
+
+        # Step 3: fallback — scan assignees on recordings if /people.json
+        # didn't surface the name. Documented in deprecated-SKILL.md as the
+        # "other-company members are filtered out of /people.json" pitfall.
+        if not resolved_id and needle:
+            for t in todos:
+                for a in (t.get('assignees') or []):
+                    if needle in (a.get('name') or '').lower():
+                        resolved_id = a['id']
+                        break
+                if resolved_id:
+                    break
+            if not resolved_id:
+                raise ValueError(
+                    f"No person matching '{person_name}' visible to current user "
+                    f"(checked /people.json and recording assignees)"
+                )
+
+        # Step 4: filter by assignee id. String-compare so the caller can
+        # pass either int or string ids (FastMCP tool args may arrive as
+        # either).
+        id_str = str(resolved_id)
+        assigned = [
+            t for t in todos
+            if any(str(a.get('id')) == id_str for a in (t.get('assignees') or []))
+        ]
+
+        # Step 5: optional scope filter.
+        if not scope:
+            return {'person_id': resolved_id, 'assignments': assigned}
+
+        today_iso = today or date.today().isoformat()
+        filtered = [t for t in assigned if _matches_scope(t.get('due_on'), scope, today_iso)]
+        return {'person_id': resolved_id, 'assignments': filtered}
 
     # Campfire (chat) methods
     def get_campfires(self, project_id):
