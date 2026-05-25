@@ -1116,6 +1116,226 @@ async def create_message(ctx: Context, project_id: str, subject: str, content: s
         }
 
 
+# Schedule Tools (Calendar Entries)
+@mcp.tool()
+async def get_schedule(ctx: Context, project_id: str) -> Dict[str, Any]:
+    """Get a project's schedule (calendar). The schedule ID is auto-discovered
+    from the project dock — call this before get_schedule_entries if you need
+    the schedule's id or entries_url.
+
+    Args:
+        project_id: The project ID
+    """
+    client = _get_basecamp_client(ctx)
+    if not client:
+        return _get_auth_error_response(ctx)
+
+    try:
+        schedule = await _run_sync(client.get_schedule, project_id)
+        return {
+            "status": "success",
+            "schedule": schedule
+        }
+    except Exception as e:
+        logger.error(f"Error getting schedule for project {project_id}: {e}")
+        if "401" in str(e) and "expired" in str(e).lower():
+            return {
+                "error": "OAuth token expired",
+                "message": "Your Basecamp OAuth token expired during the API call. Please re-authenticate by visiting http://localhost:8000 and completing the OAuth flow again."
+            }
+        return {
+            "error": "Execution error",
+            "message": str(e)
+        }
+
+
+@mcp.tool()
+async def get_schedule_entries(ctx: Context, project_id: str,
+                               schedule_id: Optional[str] = None) -> Dict[str, Any]:
+    """List all entries on a project's schedule.
+
+    Args:
+        project_id: The project ID
+        schedule_id: Optional schedule ID. If not provided, will be auto-discovered from the project dock.
+    """
+    client = _get_basecamp_client(ctx)
+    if not client:
+        return _get_auth_error_response(ctx)
+
+    try:
+        entries = await _run_sync(
+            lambda: client.get_schedule_entries(project_id, schedule_id=schedule_id)
+        )
+        return {
+            "status": "success",
+            "entries": entries,
+            "count": len(entries) if entries else 0,
+        }
+    except Exception as e:
+        logger.error(f"Error getting schedule entries for project {project_id}: {e}")
+        if "401" in str(e) and "expired" in str(e).lower():
+            return {
+                "error": "OAuth token expired",
+                "message": "Your Basecamp OAuth token expired during the API call. Please re-authenticate by visiting http://localhost:8000 and completing the OAuth flow again."
+            }
+        return {
+            "error": "Execution error",
+            "message": str(e)
+        }
+
+
+@mcp.tool()
+async def get_schedule_entry(ctx: Context, project_id: str,
+                             entry_id: str) -> Dict[str, Any]:
+    """Get a single schedule entry by ID.
+
+    Args:
+        project_id: The project ID
+        entry_id: The schedule entry ID
+    """
+    client = _get_basecamp_client(ctx)
+    if not client:
+        return _get_auth_error_response(ctx)
+
+    try:
+        entry = await _run_sync(client.get_schedule_entry, project_id, entry_id)
+        return {
+            "status": "success",
+            "entry": entry,
+        }
+    except Exception as e:
+        logger.error(f"Error getting schedule entry {entry_id}: {e}")
+        if "401" in str(e) and "expired" in str(e).lower():
+            return {
+                "error": "OAuth token expired",
+                "message": "Your Basecamp OAuth token expired during the API call. Please re-authenticate by visiting http://localhost:8000 and completing the OAuth flow again."
+            }
+        return {
+            "error": "Execution error",
+            "message": str(e)
+        }
+
+
+@mcp.tool()
+async def create_schedule_entry(ctx: Context, project_id: str,
+                                summary: str, starts_at: str, ends_at: str,
+                                description: Optional[str] = None,
+                                participant_ids: Optional[List[int]] = None,
+                                all_day: Optional[bool] = None,
+                                notify: Optional[bool] = None) -> Dict[str, Any]:
+    """Create a schedule entry on a project's schedule. The schedule ID is
+    auto-discovered from the project dock.
+
+    Args:
+        project_id: The project ID
+        summary: Entry title (required by BC3)
+        starts_at: ISO-8601 start timestamp (required by BC3)
+        ends_at: ISO-8601 end timestamp (required by BC3)
+        description: Optional HTML body
+        participant_ids: Optional list of person IDs to add as participants
+            (BC3 requires numeric IDs — pass ints, not name strings)
+        all_day: Optional. If True, BC3 ignores times in starts_at/ends_at
+        notify: Optional. If True, BC3 notifies participants
+    """
+    client = _get_basecamp_client(ctx)
+    if not client:
+        return _get_auth_error_response(ctx)
+
+    try:
+        entry = await _run_sync(
+            lambda: client.create_schedule_entry(
+                project_id,
+                summary=summary,
+                starts_at=starts_at,
+                ends_at=ends_at,
+                description=description,
+                participant_ids=participant_ids,
+                all_day=all_day,
+                notify=notify,
+            )
+        )
+        return {
+            "status": "success",
+            "entry": entry,
+            "message": f"Schedule entry '{summary}' created successfully",
+        }
+    except Exception as e:
+        logger.error(f"Error creating schedule entry: {e}")
+        if "401" in str(e) and "expired" in str(e).lower():
+            return {
+                "error": "OAuth token expired",
+                "message": "Your Basecamp OAuth token expired during the API call. Please re-authenticate by visiting http://localhost:8000 and completing the OAuth flow again."
+            }
+        return {
+            "error": "Execution error",
+            "message": str(e)
+        }
+
+
+@mcp.tool()
+async def update_schedule_entry(ctx: Context, project_id: str, entry_id: str,
+                                summary: Optional[str] = None,
+                                description: Optional[str] = None,
+                                starts_at: Optional[str] = None,
+                                ends_at: Optional[str] = None,
+                                participant_ids: Optional[List[int]] = None,
+                                all_day: Optional[bool] = None,
+                                notify: Optional[bool] = None) -> Dict[str, Any]:
+    """Update a schedule entry. BC3's PUT replaces the full representation, so
+    this fetch-then-merges: the client GETs the current entry and supplies the
+    current value for every whitelisted field the patch omits. Only the
+    whitelisted fields (summary, description, starts_at, ends_at,
+    participant_ids, all_day, notify) are forwarded.
+
+    Args:
+        project_id: The project ID
+        entry_id: The schedule entry ID
+        summary: New title. Omit/None keeps current.
+        description: New HTML body. Omit/None keeps current.
+        starts_at: New ISO start timestamp.
+        ends_at: New ISO end timestamp.
+        participant_ids: New participant list (BC3 replaces, not merges —
+            pass the full desired set; numeric IDs).
+        all_day: All-day flag.
+        notify: Notify-participants flag.
+
+    Note:
+        None / omitted = "leave current value". This tool cannot CLEAR a field
+        back to empty — that requires the BC3 UI. Same limitation as
+        update_todo / update_project.
+    """
+    client = _get_basecamp_client(ctx)
+    if not client:
+        return _get_auth_error_response(ctx)
+
+    try:
+        entry = await _run_sync(
+            lambda: client.update_schedule_entry(
+                project_id, entry_id,
+                summary=summary, description=description,
+                starts_at=starts_at, ends_at=ends_at,
+                participant_ids=participant_ids,
+                all_day=all_day, notify=notify,
+            )
+        )
+        return {
+            "status": "success",
+            "entry": entry,
+            "message": f"Schedule entry {entry_id} updated successfully",
+        }
+    except Exception as e:
+        logger.error(f"Error updating schedule entry {entry_id}: {e}")
+        if "401" in str(e) and "expired" in str(e).lower():
+            return {
+                "error": "OAuth token expired",
+                "message": "Your Basecamp OAuth token expired during the API call. Please re-authenticate by visiting http://localhost:8000 and completing the OAuth flow again."
+            }
+        return {
+            "error": "Execution error",
+            "message": str(e)
+        }
+
+
 # Inbox Tools (Email Forwards)
 @mcp.tool()
 async def get_inbox(ctx: Context, project_id: str) -> Dict[str, Any]:
