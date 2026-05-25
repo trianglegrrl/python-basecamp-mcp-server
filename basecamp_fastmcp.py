@@ -1336,6 +1336,112 @@ async def update_schedule_entry(ctx: Context, project_id: str, entry_id: str,
         }
 
 
+# People + my-profile Tools (Identity / Membership)
+@mcp.tool()
+async def get_my_profile(ctx: Context) -> Dict[str, Any]:
+    """Get the profile of the user the current OAuth token belongs to.
+
+    Useful as the seed for assignment-by-person tools — the returned `id` is
+    the token owner's person_id, which other endpoints (e.g.
+    /my/assignments.json) implicitly scope to.
+
+    Returns the BC3 Person resource: id, name, email_address, avatar_url,
+    title, time_zone, etc.
+    """
+    client = _get_basecamp_client(ctx)
+    if not client:
+        return _get_auth_error_response(ctx)
+
+    try:
+        profile = await _run_sync(client.get_my_profile)
+        identifier = profile.get('email_address') or profile.get('name') or profile.get('id')
+        return {
+            "status": "success",
+            "profile": profile,
+            "message": f"Retrieved profile for {identifier}",
+        }
+    except Exception as e:
+        logger.error(f"Error getting my profile: {e}")
+        if "401" in str(e) and "expired" in str(e).lower():
+            return {
+                "error": "OAuth token expired",
+                "message": "Your Basecamp OAuth token expired during the API call. Please re-authenticate by visiting http://localhost:8000 and completing the OAuth flow again."
+            }
+        return {
+            "error": "Execution error",
+            "message": str(e)
+        }
+
+
+@mcp.tool()
+async def get_people(ctx: Context) -> Dict[str, Any]:
+    """List every person the authenticated user can see in the account.
+
+    The underlying BC3 endpoint paginates (typically 15 per page); this tool
+    follows pagination via the `Link` header and returns the aggregated list.
+    """
+    client = _get_basecamp_client(ctx)
+    if not client:
+        return _get_auth_error_response(ctx)
+
+    try:
+        people = await _run_sync(client.get_people)
+        count = len(people) if people else 0
+        return {
+            "status": "success",
+            "people": people,
+            "count": count,
+            "message": f"Retrieved {count} people from the account",
+        }
+    except Exception as e:
+        logger.error(f"Error getting people: {e}")
+        if "401" in str(e) and "expired" in str(e).lower():
+            return {
+                "error": "OAuth token expired",
+                "message": "Your Basecamp OAuth token expired during the API call. Please re-authenticate by visiting http://localhost:8000 and completing the OAuth flow again."
+            }
+        return {
+            "error": "Execution error",
+            "message": str(e)
+        }
+
+
+@mcp.tool()
+async def get_project_people(ctx: Context, project_id: str) -> Dict[str, Any]:
+    """List every person with access to a specific project.
+
+    The underlying BC3 endpoint paginates (typically 15 per page); this tool
+    follows pagination via the `Link` header and returns the aggregated list.
+
+    Args:
+        project_id: The project ID
+    """
+    client = _get_basecamp_client(ctx)
+    if not client:
+        return _get_auth_error_response(ctx)
+
+    try:
+        people = await _run_sync(client.get_project_people, project_id)
+        count = len(people) if people else 0
+        return {
+            "status": "success",
+            "people": people,
+            "count": count,
+            "message": f"Retrieved {count} people from project {project_id}",
+        }
+    except Exception as e:
+        logger.error(f"Error getting people for project {project_id}: {e}")
+        if "401" in str(e) and "expired" in str(e).lower():
+            return {
+                "error": "OAuth token expired",
+                "message": "Your Basecamp OAuth token expired during the API call. Please re-authenticate by visiting http://localhost:8000 and completing the OAuth flow again."
+            }
+        return {
+            "error": "Execution error",
+            "message": str(e)
+        }
+
+
 # Inbox Tools (Email Forwards)
 @mcp.tool()
 async def get_inbox(ctx: Context, project_id: str) -> Dict[str, Any]:
