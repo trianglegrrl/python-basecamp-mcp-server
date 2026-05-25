@@ -1151,6 +1151,51 @@ class BasecampClient:
         else:
             raise Exception(f"Failed to get message: {response.status_code} - {response.text}")
 
+    def update_message(self, project_id, message_id,
+                       subject=None, content=None, category_id=None):
+        """Update an existing message via fetch-then-merge.
+
+        BC3's PUT /buckets/{p}/messages/{id}.json requires `subject` even on
+        a partial update. This method GETs the current message, overlays the
+        patch onto the whitelist (subject, content, category_id), supplies
+        the current `subject` when the patch omits it, and PUTs the union.
+
+        None / omitted means "preserve the current value". This implementation
+        does NOT support clearing a field back to empty — the same
+        fetch-then-merge contract as update_todo / update_project /
+        update_schedule_entry. To clear a field, use the BC3 UI directly.
+
+        Args:
+            project_id (str): Project/bucket ID
+            message_id (str): Message ID
+            subject (str, optional): New subject. Required by BC3 PUT but
+                supplied from the current message if omitted.
+            content (str, optional): New HTML content. Preserved if omitted.
+            category_id (str, optional): Message category ID. Preserved if
+                omitted; not injected if neither patch nor current has one
+                (BC3 422s on null category_id).
+
+        Returns:
+            dict: The updated message object.
+        """
+        current = self.get_message(project_id, message_id)
+        whitelist = ('subject', 'content', 'category_id')
+        patch = {'subject': subject, 'content': content, 'category_id': category_id}
+
+        body = {}
+        for key in whitelist:
+            if patch.get(key) is not None:
+                body[key] = patch[key]
+            elif key in current and current[key] is not None:
+                body[key] = current[key]
+
+        endpoint = f'buckets/{project_id}/messages/{message_id}.json'
+        response = self.put(endpoint, body)
+        if response.status_code == 200:
+            return response.json()
+        else:
+            raise Exception(f"Failed to update message: {response.status_code} - {response.text}")
+
     def get_message_categories(self, project_id):
         """Get message categories (types) for a project.
 
