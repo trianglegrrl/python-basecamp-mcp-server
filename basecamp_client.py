@@ -958,36 +958,215 @@ class BasecampClient:
             raise Exception(f"Failed to trash forward: {response.status_code} - {response.text}")
 
     # Schedule methods
+    #
+    # Ported from the deprecated Node MCP repo's src/lib/resources/schedule.ts.
+    # BC3's schedule is a dock-discovered resource (one per project), and entries
+    # live under `buckets/{project}/schedules/{schedule_id}/entries.json` for
+    # list+create, but per-entry GET/PUT use the singular `schedule_entries`
+    # URL segment with no schedule_id required. See:
+    # https://github.com/basecamp/bc3-api/blob/master/sections/schedules.md
     def get_schedule(self, project_id):
-        """Get the schedule for a project."""
-        response = self.get(f'projects/{project_id}/schedule.json')
+        """Get the schedule for a project.
+
+        The schedule ID is discovered from the project's dock array, following
+        the same pattern as get_message_board() / get_inbox().
+
+        Args:
+            project_id: Project/bucket ID
+
+        Returns:
+            dict: Schedule details including id, title, entries_count, entries_url.
+        """
+        project = self.get_project(project_id)
+        try:
+            dock_item = next(_ for _ in project["dock"] if _["name"] == "schedule")
+            schedule_id = dock_item['id']
+            response = self.get(f'buckets/{project_id}/schedules/{schedule_id}.json')
+            if response.status_code == 200:
+                return response.json()
+            else:
+                raise Exception(f"Failed to get schedule: {response.status_code} - {response.text}")
+        except (IndexError, TypeError, StopIteration):
+            raise Exception(f"No schedule found for project: {project_id}")
+
+    def get_schedule_entries(self, project_id, schedule_id=None):
+        """Get all entries for a project's schedule, handling pagination.
+
+        Basecamp paginates list endpoints (commonly 15 items per page). This
+        implementation follows pagination via the `page` query parameter and
+        the HTTP `Link` header if present, aggregating all pages before
+        returning the combined list.
+
+        Args:
+            project_id (str): Project/bucket ID
+            schedule_id (str, optional): Schedule ID. If not provided,
+                will be discovered from the project's dock.
+
+        Returns:
+            list: All schedule entries in the schedule
+        """
+        if not schedule_id:
+            schedule = self.get_schedule(project_id)
+            schedule_id = schedule['id']
+
+        endpoint = f'buckets/{project_id}/schedules/{schedule_id}/entries.json'
+
+        all_entries = []
+        page = 1
+
+        while True:
+            response = self.get(endpoint, params={"page": page})
+            if response.status_code != 200:
+                raise Exception(f"Failed to get schedule entries: {response.status_code} - {response.text}")
+
+            page_items = response.json() or []
+            all_entries.extend(page_items)
+
+            # Check for next page using Link header
+            link_header = response.headers.get("Link", "")
+            has_next = 'rel="next"' in link_header if link_header else False
+
+            if not page_items or not has_next:
+                break
+
+            page += 1
+
+        return all_entries
+
+    def get_schedule_entry(self, project_id, entry_id):
+        """Get a single schedule entry by ID.
+
+        Note: BC3 uses the singular `schedule_entries` URL segment for per-entry
+        GET/PUT (no schedule_id required), but the plural `schedules` segment
+        for list+create. See Basecamp's docs.
+
+        Args:
+            project_id: Project/bucket ID
+            entry_id: Schedule entry ID
+
+        Returns:
+            dict: Schedule entry details.
+        """
+        endpoint = f'buckets/{project_id}/schedule_entries/{entry_id}.json'
+        response = self.get(endpoint)
         if response.status_code == 200:
             return response.json()
         else:
-            raise Exception(f"Failed to get schedule: {response.status_code} - {response.text}")
+            raise Exception(f"Failed to get schedule entry: {response.status_code} - {response.text}")
 
-    def get_schedule_entries(self, project_id):
-        """
-        Get schedule entries for a project.
+    def create_schedule_entry(self, project_id, summary, starts_at, ends_at,
+                              schedule_id=None, description=None,
+                              participant_ids=None, all_day=None, notify=None):
+        """Create a schedule entry on a project's schedule.
 
         Args:
-            project_id (int): Project ID
+            project_id: Project/bucket ID
+            summary (str): Entry title — required by BC3.
+            starts_at (str): ISO-8601 timestamp — required by BC3.
+            ends_at (str): ISO-8601 timestamp — required by BC3.
+            schedule_id: Optional schedule ID. If not provided, will be
+                discovered from the project's dock.
+            description (str, optional): HTML body.
+            participant_ids (list[int|str], optional): IDs of people to add as
+                participants. BC3 accepts numeric IDs (mirror the same numeric-id
+                guidance from update_project_access).
+            all_day (bool, optional): If True, BC3 ignores the times in
+                starts_at/ends_at and treats the entry as an all-day event.
+            notify (bool, optional): If True, BC3 notifies participants.
 
         Returns:
-            list: Schedule entries
+            dict: The created schedule entry.
         """
-        try:
-            endpoint = f"buckets/{project_id}/schedules.json"
-            schedule = self.get(endpoint)
+        if not schedule_id:
+            schedule = self.get_schedule(project_id)
+            schedule_id = schedule['id']
+        data = {
+            'summary': summary,
+            'starts_at': starts_at,
+            'ends_at': ends_at,
+        }
+        if description is not None:
+            data['description'] = description
+        if participant_ids is not None:
+            data['participant_ids'] = participant_ids
+        if all_day is not None:
+            data['all_day'] = all_day
+        if notify is not None:
+            data['notify'] = notify
+        endpoint = f'buckets/{project_id}/schedules/{schedule_id}/entries.json'
+        response = self.post(endpoint, data)
+        if response.status_code == 201:
+            return response.json()
+        else:
+            raise Exception(f"Failed to create schedule entry: {response.status_code} - {response.text}")
 
-            if isinstance(schedule, list) and len(schedule) > 0:
-                schedule_id = schedule[0]['id']
-                entries_endpoint = f"buckets/{project_id}/schedules/{schedule_id}/entries.json"
-                return self.get(entries_endpoint)
-            else:
-                return []
-        except Exception as e:
-            raise Exception(f"Failed to get schedule: {str(e)}")
+    def update_schedule_entry(self, project_id, entry_id, summary=None,
+                              description=None, starts_at=None, ends_at=None,
+                              participant_ids=None, all_day=None, notify=None):
+        """Update a schedule entry. BC3's PUT replaces the full representation,
+        so this fetch-then-merges: the client GETs the current entry and overlays
+        the explicitly-provided kwargs. Only the whitelisted fields are forwarded.
+
+        Whitelist (mirrors Node ref's SCHEDULE_ENTRY_UPDATE_WHITELIST):
+            summary, description, starts_at, ends_at, participant_ids, all_day, notify.
+
+        Args:
+            project_id: Project/bucket ID
+            entry_id: Schedule entry ID
+            summary (str, optional): New title. Omit/None keeps current.
+            description (str, optional): New HTML body. Omit/None keeps current.
+            starts_at (str, optional): New ISO start timestamp.
+            ends_at (str, optional): New ISO end timestamp.
+            participant_ids (list, optional): New participant list (BC3 replaces,
+                not merges — pass the full desired set).
+            all_day (bool, optional): All-day flag.
+            notify (bool, optional): Notify-participants flag.
+
+        Note:
+            Passing None (or omitting) any field means "preserve the current value".
+            This implementation does NOT support clearing a field back to empty —
+            the same fetch-then-merge contract as update_todo() and update_project().
+            To clear a field, use the BC3 UI directly.
+
+        Returns:
+            dict: The updated schedule entry.
+        """
+        current = self.get_schedule_entry(project_id, entry_id)
+        whitelist = (
+            'summary', 'description', 'starts_at', 'ends_at',
+            'participant_ids', 'all_day', 'notify',
+        )
+
+        def _participant_ids_from(entry):
+            return [p['id'] for p in entry.get('participants', [])]
+
+        patch = {
+            'summary': summary,
+            'description': description,
+            'starts_at': starts_at,
+            'ends_at': ends_at,
+            'participant_ids': participant_ids,
+            'all_day': all_day,
+            'notify': notify,
+        }
+        body = {}
+        for key in whitelist:
+            if patch.get(key) is not None:
+                body[key] = patch[key]
+            elif key == 'participant_ids':
+                # Server returns participants under 'participants', not 'participant_ids'.
+                body[key] = _participant_ids_from(current)
+            elif key in current and current[key] is not None:
+                # Forward any whitelisted current value so a partial PUT doesn't
+                # blank other fields server-side (mirrors Node ref's
+                # applyUpdate('full', ...) and update_project behaviour).
+                body[key] = current[key]
+        endpoint = f'buckets/{project_id}/schedule_entries/{entry_id}.json'
+        response = self.put(endpoint, body)
+        if response.status_code == 200:
+            return response.json()
+        else:
+            raise Exception(f"Failed to update schedule entry: {response.status_code} - {response.text}")
 
     # Comments methods
     def get_comments(self, recording_id, project_id, page=1):

@@ -411,8 +411,8 @@ class BasecampSearch:
         try:
             # Get the schedule entries (from all projects or a specific one)
             if project_id:
+                # get_schedule_entries returns list[dict] (paginated, full set)
                 entries = self.client.get_schedule_entries(project_id)
-                entries = entries.json() if hasattr(entries, 'json') else entries
             else:
                 # Get all projects first
                 projects = self.client.get_projects()
@@ -420,8 +420,8 @@ class BasecampSearch:
                 # Then get schedule entries from each
                 entries = []
                 for project in projects:
+                    # get_schedule_entries returns list[dict] (paginated, full set)
                     project_entries = self.client.get_schedule_entries(project['id'])
-                    project_entries = project_entries.json() if hasattr(project_entries, 'json') else project_entries
                     if project_entries:
                         for entry in project_entries:
                             entry['project'] = {
