@@ -248,6 +248,173 @@ async def get_project(ctx: Context, project_id: str) -> Dict[str, Any]:
         }
 
 @mcp.tool()
+async def create_project(ctx: Context, name: str,
+                         description: Optional[str] = None) -> Dict[str, Any]:
+    """Create a new Basecamp project.
+
+    Args:
+        name: Project name (required by BC3)
+        description: Optional project description (free-form text)
+
+    Note:
+        Free-plan accounts return 507 Insufficient Storage when the project
+        cap is hit; the message is surfaced verbatim in the error response.
+    """
+    client = _get_basecamp_client(ctx)
+    if not client:
+        return _get_auth_error_response(ctx)
+
+    try:
+        project = await _run_sync(
+            lambda: client.create_project(name=name, description=description)
+        )
+        return {
+            "status": "success",
+            "project": project,
+            "message": f"Project '{name}' created successfully",
+        }
+    except Exception as e:
+        logger.error(f"Error creating project: {e}")
+        if "401" in str(e) and "expired" in str(e).lower():
+            return {
+                "error": "OAuth token expired",
+                "message": "Your Basecamp OAuth token expired during the API call. Please re-authenticate by visiting http://localhost:8000 and completing the OAuth flow again."
+            }
+        return {
+            "error": "Execution error",
+            "message": str(e)
+        }
+
+
+@mcp.tool()
+async def update_project(ctx: Context, project_id: str,
+                         name: Optional[str] = None,
+                         description: Optional[str] = None,
+                         admissions: Optional[str] = None,
+                         schedule_attributes: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Update a Basecamp project. BC3 requires `name` in the PUT body even
+    when changing only the description, so this fetch-then-merges: the client
+    GETs the current project and supplies the current `name` if the patch
+    omits it. Only the whitelisted fields (name, description, admissions,
+    schedule_attributes) are forwarded.
+
+    Args:
+        project_id: Project ID to update
+        name: New project name. Omit to keep current.
+        description: New project description.
+        admissions: Project admissions setting.
+        schedule_attributes: Project schedule attributes dict.
+
+    Note:
+        None / omitted = "leave current value". This tool cannot CLEAR a field
+        back to empty — that requires the BC3 UI. Same limitation as update_todo.
+    """
+    client = _get_basecamp_client(ctx)
+    if not client:
+        return _get_auth_error_response(ctx)
+
+    try:
+        project = await _run_sync(
+            lambda: client.update_project(
+                project_id, name=name, description=description,
+                admissions=admissions, schedule_attributes=schedule_attributes,
+            )
+        )
+        return {
+            "status": "success",
+            "project": project,
+            "message": f"Project {project_id} updated successfully",
+        }
+    except Exception as e:
+        logger.error(f"Error updating project {project_id}: {e}")
+        if "401" in str(e) and "expired" in str(e).lower():
+            return {
+                "error": "OAuth token expired",
+                "message": "Your Basecamp OAuth token expired during the API call. Please re-authenticate by visiting http://localhost:8000 and completing the OAuth flow again."
+            }
+        return {
+            "error": "Execution error",
+            "message": str(e)
+        }
+
+
+@mcp.tool()
+async def trash_project(ctx: Context, project_id: str) -> Dict[str, Any]:
+    """Trash (soft-delete) a Basecamp project. Recoverable from the BC3 UI
+    for 30 days, after which BC3 hard-deletes it.
+
+    Args:
+        project_id: Project ID to trash
+    """
+    client = _get_basecamp_client(ctx)
+    if not client:
+        return _get_auth_error_response(ctx)
+
+    try:
+        await _run_sync(lambda: client.trash_project(project_id))
+        return {
+            "status": "success",
+            "message": f"Project {project_id} trashed successfully (recoverable from the BC3 UI for 30 days)",
+        }
+    except Exception as e:
+        logger.error(f"Error trashing project {project_id}: {e}")
+        if "401" in str(e) and "expired" in str(e).lower():
+            return {
+                "error": "OAuth token expired",
+                "message": "Your Basecamp OAuth token expired during the API call. Please re-authenticate by visiting http://localhost:8000 and completing the OAuth flow again."
+            }
+        return {
+            "error": "Execution error",
+            "message": str(e)
+        }
+
+
+@mcp.tool()
+async def update_project_access(ctx: Context, project_id: str,
+                                grant: Optional[List[int]] = None,
+                                revoke: Optional[List[int]] = None,
+                                create: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+    """Grant / revoke project access, or invite new people.
+
+    BC3 silently drops string IDs in `grant` / `revoke` — callers MUST pass
+    numeric person IDs (use `get_people` to look them up).
+
+    Args:
+        project_id: Project ID
+        grant: Numeric person IDs to add to the project.
+        revoke: Numeric person IDs to remove from the project.
+        create: New people to invite. Each dict needs `name` and
+                `email_address`; `title` and `company_name` are optional.
+    """
+    client = _get_basecamp_client(ctx)
+    if not client:
+        return _get_auth_error_response(ctx)
+
+    try:
+        access = await _run_sync(
+            lambda: client.update_project_access(
+                project_id, grant=grant, revoke=revoke, create=create,
+            )
+        )
+        return {
+            "status": "success",
+            "access": access,
+            "message": f"Project {project_id} access updated successfully",
+        }
+    except Exception as e:
+        logger.error(f"Error updating project access {project_id}: {e}")
+        if "401" in str(e) and "expired" in str(e).lower():
+            return {
+                "error": "OAuth token expired",
+                "message": "Your Basecamp OAuth token expired during the API call. Please re-authenticate by visiting http://localhost:8000 and completing the OAuth flow again."
+            }
+        return {
+            "error": "Execution error",
+            "message": str(e)
+        }
+
+
+@mcp.tool()
 async def search_basecamp(ctx: Context, query: str, project_id: Optional[str] = None) -> Dict[str, Any]:
     """Search across Basecamp projects, todos, and messages.
 

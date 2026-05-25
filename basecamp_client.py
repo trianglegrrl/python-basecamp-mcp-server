@@ -123,6 +123,131 @@ class BasecampClient:
         else:
             raise Exception(f"Failed to get project: {response.status_code} - {response.text}")
 
+    # Project write methods
+    #
+    # Ported from the deprecated Node MCP repo's src/lib/resources/projects.ts.
+    # All four endpoints live directly under /projects (no `buckets/` prefix);
+    # see https://github.com/basecamp/bc3-api/blob/master/sections/projects.md.
+    def create_project(self, name, description=None):
+        """Create a new project.
+
+        Args:
+            name (str): Project name (required by BC3)
+            description (str, optional): Project description (free-form text)
+
+        Returns:
+            dict: The created project object.
+
+        Note:
+            Free-plan accounts return 507 Insufficient Storage when the
+            project cap is hit — the message is surfaced verbatim in the
+            raised Exception so callers can pass it through.
+        """
+        data = {'name': name}
+        if description is not None:
+            data['description'] = description
+        response = self.post('projects.json', data)
+        if response.status_code == 201:
+            return response.json()
+        else:
+            raise Exception(f"Failed to create project: {response.status_code} - {response.text}")
+
+    def update_project(self, project_id, name=None, description=None,
+                       admissions=None, schedule_attributes=None):
+        """Update a project. BC3 requires `name` in the PUT body even when
+        changing only the description, so this fetch-then-merges: GET the
+        current project, then overlay the patch onto a whitelist of
+        {name, description, admissions, schedule_attributes}, supplying the
+        current `name` if the patch omits it.
+
+        Args:
+            project_id (str): Project ID
+            name (str, optional): New name. Passing None (or omitting) keeps
+                the current value.
+            description (str, optional): New description. Passing None (or
+                omitting) keeps the current value.
+            admissions (str, optional): Project admissions setting. Passing
+                None (or omitting) keeps the current value.
+            schedule_attributes (dict, optional): Project schedule attributes.
+                Passing None (or omitting) keeps the current value.
+
+        Note:
+            Passing None (or omitting) any field means "preserve the current value".
+            This implementation does NOT support clearing a field back to empty —
+            the same fetch-then-merge contract as update_todo(). To clear a field,
+            use the BC3 UI directly. (Tracked: cross-tool sentinel-based clearing.)
+
+        Returns:
+            dict: The updated project object.
+        """
+        current = self.get_project(project_id)
+        whitelist = ('name', 'description', 'admissions', 'schedule_attributes')
+        patch = {
+            'name': name,
+            'description': description,
+            'admissions': admissions,
+            'schedule_attributes': schedule_attributes,
+        }
+        body = {}
+        for key in whitelist:
+            if patch.get(key) is not None:
+                body[key] = patch[key]
+            elif key in current and current[key] is not None:
+                # Only `name` is required by BC3 — but mirroring the Node
+                # repo's `applyUpdate('full', ...)` behaviour, we forward any
+                # whitelisted current value so a partial PUT doesn't blank
+                # other fields server-side.
+                body[key] = current[key]
+        response = self.put(f'projects/{project_id}.json', body)
+        if response.status_code == 200:
+            return response.json()
+        else:
+            raise Exception(f"Failed to update project: {response.status_code} - {response.text}")
+
+    def trash_project(self, project_id):
+        """Trash (soft-delete) a project. Recoverable from the BC3 UI for 30
+        days; after that BC3 hard-deletes it.
+
+        Args:
+            project_id (str): Project ID
+
+        Returns:
+            bool: True on success (BC3 returns 204).
+        """
+        response = self.delete(f'projects/{project_id}.json')
+        if response.status_code == 204:
+            return True
+        else:
+            raise Exception(f"Failed to trash project: {response.status_code} - {response.text}")
+
+    def update_project_access(self, project_id, grant=None, revoke=None, create=None):
+        """Grant / revoke project access, or invite new people.
+
+        Args:
+            project_id (str): Project ID
+            grant (list[int], optional): Person IDs to add to the project.
+                BC3 silently drops non-integer IDs — caller MUST pass numeric.
+            revoke (list[int], optional): Person IDs to remove from the project.
+            create (list[dict], optional): New people to invite. Each dict
+                requires `name` and `email_address`; `title` and
+                `company_name` are optional.
+
+        Returns:
+            dict: `{granted: [Person...], revoked: [Person...]}`
+        """
+        body = {}
+        if grant is not None:
+            body['grant'] = grant
+        if revoke is not None:
+            body['revoke'] = revoke
+        if create is not None:
+            body['create'] = create
+        response = self.put(f'projects/{project_id}/people/users.json', body)
+        if response.status_code == 200:
+            return response.json()
+        else:
+            raise Exception(f"Failed to update project access: {response.status_code} - {response.text}")
+
     # To-do list methods
     def get_todoset(self, project_id):
         """Get the todoset for a project (Basecamp 3 has one todoset per project)."""
