@@ -60,7 +60,18 @@ LOG_FILE_PATH = _resolve_log_file_path()
 # end up on the root logger. Regression test in tests/test_logging_setup.py.
 # See pn-ai-portal#94 for the post-mortem.
 logging.basicConfig(
-    level=logging.DEBUG,
+    # INFO (not DEBUG) intentionally — pre-`force=True` the level was set
+    # to DEBUG but never took effect because the import-time handler was
+    # already installed; the effective level in production was the root
+    # logger's default (WARNING) plus whatever mcp.server.fastmcp set on
+    # its own 'mcp.*' loggers. Switching `force=True` on without lowering
+    # the level here floods stderr with debug lines and overruns the
+    # 65KB PIPE that `scripts/smoke_streamable_http.py` keeps undrained
+    # (subprocess.Popen(stderr=PIPE) that's never read), which blocks
+    # the server on stderr writes and the smoke times out reading the
+    # SSE response. INFO matches the previously-effective behavior.
+    # See BASECAMP_MCP_LOG_LEVEL follow-up if operators need DEBUG.
+    level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.FileHandler(LOG_FILE_PATH),
