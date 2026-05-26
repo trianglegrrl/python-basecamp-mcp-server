@@ -26,8 +26,26 @@ PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 DOTENV_PATH = os.path.join(PROJECT_ROOT, '.env')
 load_dotenv(DOTENV_PATH)
 
-# Set up logging to file AND stderr (following MCP best practices)
-LOG_FILE_PATH = os.path.join(PROJECT_ROOT, 'basecamp_fastmcp.log')
+# Set up logging to file AND stderr (following MCP best practices).
+#
+# The log-file path is configurable via BASECAMP_MCP_LOG_FILE, with the
+# project-root default preserved for backward compatibility. The override
+# exists because hosted deployments under systemd `ProtectSystem=strict`
+# typically mark the project root read-only and only allow writes to a
+# nested `logs/` subdir (via `ReadWritePaths=`). Without the override,
+# `FileHandler(LOG_FILE_PATH)` raises `OSError: [Errno 30] Read-only file
+# system` at module import time and the service crash-loops before it
+# can serve traffic. Mirrors the existing `BASECAMP_MCP_TOKEN_FILE`
+# pattern in `token_storage.py`. See pn-ai-portal#94 for the post-mortem.
+def _resolve_log_file_path() -> str:
+    """Return the resolved log-file path, honoring BASECAMP_MCP_LOG_FILE."""
+    configured = os.environ.get('BASECAMP_MCP_LOG_FILE')
+    if configured:
+        return os.path.expanduser(os.path.expandvars(configured))
+    return os.path.join(PROJECT_ROOT, 'basecamp_fastmcp.log')
+
+
+LOG_FILE_PATH = _resolve_log_file_path()
 logging.basicConfig(
     level=logging.DEBUG,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
