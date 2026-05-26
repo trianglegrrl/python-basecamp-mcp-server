@@ -45,7 +45,32 @@ def _resolve_log_file_path() -> str:
     return os.path.join(PROJECT_ROOT, 'basecamp_fastmcp.log')
 
 
+# Log-level override mirroring the BASECAMP_MCP_LOG_FILE pattern above.
+# Production ships at INFO (matches the previously-effective behavior pre-
+# `force=True`); operators can flip this to DEBUG via /etc/default/basecamp-mcp
+# on the box for a temporary diagnostic window without code edits or a
+# redeploy. Unrecognized values fall back to INFO so a typo in the env file
+# yields a working server, not a startup crash. See pn-ai-portal#107.
+def _resolve_log_level() -> int:
+    """Return the resolved log level from BASECAMP_MCP_LOG_LEVEL, default INFO.
+
+    Accepts the standard logging level names ('DEBUG', 'INFO', 'WARNING',
+    'ERROR', 'CRITICAL') case-insensitively. Unrecognized strings and the
+    empty string both fall back to INFO.
+    """
+    configured = os.environ.get('BASECAMP_MCP_LOG_LEVEL', '').strip().upper()
+    if not configured:
+        return logging.INFO
+    # `getattr(logging, ...)` would otherwise happily return non-int
+    # attributes like `BASIC_FORMAT`; guard against that.
+    resolved = getattr(logging, configured, None)
+    if isinstance(resolved, int):
+        return resolved
+    return logging.INFO
+
+
 LOG_FILE_PATH = _resolve_log_file_path()
+LOG_LEVEL = _resolve_log_level()
 # `force=True` is load-bearing: by the time this `basicConfig` runs, an
 # import-time side-effect of `mcp.server.fastmcp` (or one of its sub-deps
 # in the FastMCP / uvicorn tree) has already installed a `StreamHandler`
@@ -60,18 +85,19 @@ LOG_FILE_PATH = _resolve_log_file_path()
 # end up on the root logger. Regression test in tests/test_logging_setup.py.
 # See pn-ai-portal#94 for the post-mortem.
 logging.basicConfig(
-    # INFO (not DEBUG) intentionally — pre-`force=True` the level was set
-    # to DEBUG but never took effect because the import-time handler was
-    # already installed; the effective level in production was the root
-    # logger's default (WARNING) plus whatever mcp.server.fastmcp set on
-    # its own 'mcp.*' loggers. Switching `force=True` on without lowering
-    # the level here floods stderr with debug lines and overruns the
-    # 65KB PIPE that `scripts/smoke_streamable_http.py` keeps undrained
-    # (subprocess.Popen(stderr=PIPE) that's never read), which blocks
-    # the server on stderr writes and the smoke times out reading the
-    # SSE response. INFO matches the previously-effective behavior.
-    # See BASECAMP_MCP_LOG_LEVEL follow-up if operators need DEBUG.
-    level=logging.INFO,
+    # Default INFO (not DEBUG) — pre-`force=True` the level was set to DEBUG
+    # but never took effect because the import-time handler was already
+    # installed; the effective level in production was the root logger's
+    # default (WARNING) plus whatever mcp.server.fastmcp set on its own
+    # 'mcp.*' loggers. Switching `force=True` on without lowering the level
+    # here floods stderr with debug lines and overruns the 65KB PIPE that
+    # `scripts/smoke_streamable_http.py` keeps undrained (subprocess.Popen(
+    # stderr=PIPE) that's never read), which blocks the server on stderr
+    # writes and the smoke times out reading the SSE response. INFO matches
+    # the previously-effective behavior. Operators who need DEBUG for a
+    # diagnostic window can set BASECAMP_MCP_LOG_LEVEL=DEBUG in
+    # /etc/default/basecamp-mcp and restart the unit; pn-ai-portal#107.
+    level=LOG_LEVEL,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.FileHandler(LOG_FILE_PATH),
