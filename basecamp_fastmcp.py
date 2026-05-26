@@ -46,13 +46,27 @@ def _resolve_log_file_path() -> str:
 
 
 LOG_FILE_PATH = _resolve_log_file_path()
+# `force=True` is load-bearing: by the time this `basicConfig` runs, an
+# import-time side-effect of `mcp.server.fastmcp` (or one of its sub-deps
+# in the FastMCP / uvicorn tree) has already installed a `StreamHandler`
+# on the root logger. Per the Python docs, `basicConfig` is silently a
+# no-op when the root logger already has handlers — so without `force=True`
+# the FileHandler below is never registered, every log line flows ONLY to
+# stderr (and from there to the systemd journal), and the configured
+# BASECAMP_MCP_LOG_FILE on disk stays at 0 bytes forever.
+#
+# `force=True` (Python 3.8+) removes + closes pre-existing handlers before
+# installing ours, so both the FileHandler AND the explicit StreamHandler
+# end up on the root logger. Regression test in tests/test_logging_setup.py.
+# See pn-ai-portal#94 for the post-mortem.
 logging.basicConfig(
     level=logging.DEBUG,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.FileHandler(LOG_FILE_PATH),
         logging.StreamHandler(sys.stderr)  # Critical: log to stderr, not stdout
-    ]
+    ],
+    force=True,
 )
 logger = logging.getLogger('basecamp_fastmcp')
 
